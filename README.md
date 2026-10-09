@@ -10,7 +10,7 @@
 [![Zero Cluster](https://img.shields.io/badge/Serverless-100%25%20In--Warehouse%20SQL-0288D1)](#tldr)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-An end-to-end, 100% GCP-native reference implementation for **Financial Services Consumer Banking & Payments Risk Operations** that combines all six **BigQuery Augmented Analytics Table-Valued Functions (TVFs)** (`ML.TREND`, `ML.SEASONALITY`, `ML.CORRELATION`, `ML.DETECT_CHANGE_POINTS`, `AI.KEY_DRIVERS`, and `AI.CAUSAL_EFFECT`) with **Knowledge Catalog (Dataplex)** semantic governance and **BigQuery Conversational Analytics (BQCA)** Data Agents. Everything runs inside BigQuery via the **Google Cloud Console** (or Cloud Shell) with **zero Terraform, zero Makefiles, zero notebooks, and zero hardcoded GCP project IDs**.
+An end-to-end, 100% GCP-native reference implementation for **Financial Services Consumer Banking & Payments Risk Operations** that combines all six **BigQuery Augmented Analytics Table-Valued Functions (TVFs)** (`ML.TREND`, `ML.SEASONALITY`, `ML.CORRELATION`, `ML.DETECT_CHANGE_POINTS`, `AI.KEY_DRIVERS`, and `AI.CAUSAL_EFFECT`) with **Knowledge Catalog** semantic governance and **BigQuery Conversational Analytics (BQCA)** Data Agents. Everything runs inside BigQuery via the **Google Cloud Console** (or Cloud Shell) with **zero Terraform, zero Makefiles, zero notebooks, and zero hardcoded GCP project IDs**.
 
 **Contents**
 | | |
@@ -405,8 +405,4 @@ This is a teaching blueprint on public data. Read the results with these in mind
 | **Change points** | `ML.DETECT_CHANGE_POINTS` on daily Reg E totals | The detected regimes last 4–16 days. Treat them as surges, not permanent structural shifts. |
 | **Agent audit** | [`sql/06`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/06_audit_bqca_agent_jobs.sql) filters `ca-bq-job = 'true'` | Validated against labeled jobs in a test project. Your results depend on Conversational Analytics actually running in your project. |
 
----
 
-## License
-
-Released under the [Apache License 2.0](LICENSE). The CFPB Consumer Complaint Database is public data published by the U.S. Consumer Financial Protection Bureau.
