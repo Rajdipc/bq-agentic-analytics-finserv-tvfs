@@ -185,8 +185,9 @@ bq-agentic-analytics-finserv-tvfs/
 │   ├── 04_act3_intervention_causal_effect.sql             # Act 3: Counterfactual AI.CAUSAL_EFFECT (summary, time series & multi-series)
 │   ├── 05_enrich_metadata_for_knowledge_catalog.sql       # DDL: Populates authoritative table & column descriptions
 │   └── 06_audit_bqca_agent_jobs.sql                       # Audit: Verifies agent TVF calls via `region-us`.INFORMATION_SCHEMA.JOBS
-└── docs/
-    └── knowledge_catalog_and_bqca_assets.md               # Copy-paste Glossary Terms, Agent Instructions & Verified Queries
+├── docs/
+│   └── knowledge_catalog_and_bqca_assets.md               # Copy-paste Glossary Terms, Agent Instructions & Verified Queries
+└── images/                                                # High-DPI architecture & TVF reference diagrams
 ```
 
 | File Path | Purpose |
@@ -199,6 +200,7 @@ bq-agentic-analytics-finserv-tvfs/
 | [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) | DDL: Populates authoritative table and column descriptions for Knowledge Catalog & BQCA |
 | [`sql/06_audit_bqca_agent_jobs.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/06_audit_bqca_agent_jobs.sql) | Audit: Verifies agent TVF execution via `` `region-us`.INFORMATION_SCHEMA.JOBS `` |
 | [`docs/knowledge_catalog_and_bqca_assets.md`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/docs/knowledge_catalog_and_bqca_assets.md) | Copy-paste Knowledge Catalog Business Glossary terms, Agent Instructions, and Verified Queries |
+| [`images/`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/tree/main/images) | High-DPI architecture and 6-TVF reference diagrams (`diagram_1`–`diagram_4`, `table_1`–`table_2`) |
 
 ---
 
