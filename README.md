@@ -1,10 +1,13 @@
 # Grounded Agentic Analytics in BigQuery
 
 [![GitHub Repository](https://img.shields.io/badge/GitHub-bq--agentic--analytics--finserv--tvfs-181717?logo=github)](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs)
-[![Google Cloud](https://img.shields.io/badge/Google%20Cloud-BigQuery%20AI-4285F4?logo=google-cloud)](https://cloud.google.com/bigquery)
+[![Google Cloud](https://img.shields.io/badge/Google%20Cloud-BigQuery%20AI%20%26%20ML-4285F4?logo=google-cloud)](https://cloud.google.com/bigquery)
 [![Augmented Analytics TVFs](https://img.shields.io/badge/GoogleSQL-6%20Augmented%20Analytics%20TVFs-FBBC04?logo=google-cloud)](https://cloud.google.com/blog/products/data-analytics/bigquery-augmented-analytics-tvfs)
 [![Knowledge Catalog](https://img.shields.io/badge/Knowledge%20Catalog-Dataplex%20Governance-34A853?logo=google-cloud)](https://docs.cloud.google.com/knowledge-catalog/docs/data-insights)
 [![Conversational Analytics](https://img.shields.io/badge/Conversational%20Analytics-BQCA%20Data%20Agents-EA4335?logo=google-cloud)](https://docs.cloud.google.com/bigquery/docs/conversational-analytics)
+[![Causal Inference & Time Series](https://img.shields.io/badge/Causal%20AI-Change%20Points%20%7C%20Key%20Drivers%20%7C%20Causal%20Effect-8E24AA)](https://cloud.google.com/bigquery/docs/reference/standard-sql/bigqueryml-syntax-causal-effect)
+[![Domain](https://img.shields.io/badge/FinServ-Reg%20E%20%26%20Payments%20Risk%20Ops-00897B)](https://www.consumerfinance.gov/data-research/consumer-complaints/)
+[![Zero Cluster](https://img.shields.io/badge/Serverless-100%25%20In--Warehouse%20SQL-0288D1)](#tldr)
 
 An end-to-end, 100% GCP-native reference implementation for **Financial Services Consumer Banking & Payments Risk Operations** that combines all six **BigQuery Augmented Analytics Table-Valued Functions (TVFs)** (`ML.TREND`, `ML.SEASONALITY`, `ML.CORRELATION`, `ML.DETECT_CHANGE_POINTS`, `AI.KEY_DRIVERS`, and `AI.CAUSAL_EFFECT`) with **Knowledge Catalog (Dataplex)** semantic governance and **BigQuery Conversational Analytics (BQCA)** Data Agents. Everything runs inside BigQuery via the **Google Cloud Console** (or Cloud Shell) with **zero Terraform, zero Makefiles, zero notebooks, and zero hardcoded GCP project IDs**.
 
@@ -75,6 +78,13 @@ bq query --location=US --use_legacy_sql=false < sql/05_enrich_metadata_for_knowl
 
 ## Architecture
 
+![Grounded Agentic Analytics Architecture](images/diagram_1_architecture_overview.png)
+
+![Three-Act Statistical & Causal TVF Pipeline](images/diagram_2_three_act_tvf_pipeline.png)
+
+<details>
+<summary><strong>Expand Detailed ASCII Architecture Diagram</strong></summary>
+
 ```
 +---------------------------------------------------------------------------------------------------+
 |                     SOURCE: bigquery-public-data.cfpb_complaints.complaint_database               |
@@ -125,6 +135,8 @@ bq query --location=US --use_legacy_sql=false < sql/05_enrich_metadata_for_knowl
 |  - Audited via `region-us`.INFORMATION_SCHEMA.JOBS (sql/06_audit_bqca_agent_jobs.sql)             |
 +---------------------------------------------------------------------------------------------------+
 ```
+
+</details>
 
 ---
 
