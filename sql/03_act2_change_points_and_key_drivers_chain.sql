@@ -60,11 +60,16 @@ ORDER BY regime_start_date;
 -- Technical Highlight:
 --   We chain `ML.DETECT_CHANGE_POINTS` directly into `AI.KEY_DRIVERS`:
 --   1. `detected_regimes` runs `ML.DETECT_CHANGE_POINTS` on daily Reg E volume.
---   2. `primary_surge_breakpoint` selects the start date of the highest-volume
---      detected regime shift (`ORDER BY regime_avg DESC LIMIT 1`).
---   3. `dispute_comparison_window` labels the 60 days after the breakpoint as
---      the Interest Group (`is_post_shift = TRUE`) and the 60 days prior as
---      the Reference Group (`is_post_shift = FALSE`).
+--   2. `primary_surge_regime` selects the detected regime with the highest
+--      average daily volume (`ORDER BY regime_avg DESC LIMIT 1`) and keeps
+--      BOTH its start and end dates.
+--   3. `dispute_comparison_window` labels every dispute INSIDE that regime
+--      `[regime_start, regime_end]` as the Interest Group (`is_surge = TRUE`)
+--      and an EQUAL-LENGTH window immediately before it as the Reference Group
+--      (`is_surge = FALSE`). Equal lengths keep `difference` / `relative_difference`
+--      directly interpretable as "extra disputes during the surge".
+--      (Comparing a fixed +/-60-day window instead would dilute a short
+--      2-week surge with ~45 normal days and hide it.)
 --   4. `AI.KEY_DRIVERS` scans multi-dimensional combinations and prunes
 --      redundant parent slices (`enable_pruning => TRUE`) to surface the top
 --      root-cause segments.
@@ -78,9 +83,9 @@ WITH daily_reg_e AS (
 ),
 detected_regimes AS (
   SELECT
-    DATE(begin_timestamp) AS shift_date,
-    metrics.avg AS regime_avg,
-    metrics.count AS regime_days
+    DATE(begin_timestamp) AS regime_start,
+    DATE(end_timestamp) AS regime_end,
+    metrics.avg AS regime_avg
   FROM ML.DETECT_CHANGE_POINTS(
     TABLE daily_reg_e,
     data_col => 'total_reg_e_disputes',
@@ -88,8 +93,11 @@ detected_regimes AS (
   )
   WHERE begin_timestamp IS NOT NULL
 ),
-primary_surge_breakpoint AS (
-  SELECT shift_date
+primary_surge_regime AS (
+  SELECT
+    regime_start,
+    regime_end,
+    DATE_DIFF(regime_end, regime_start, DAY) + 1 AS regime_days
   FROM detected_regimes
   ORDER BY regime_avg DESC
   LIMIT 1
@@ -102,17 +110,17 @@ dispute_comparison_window AS (
     f.subm_chnl_cd,
     f.jur_state_cd,
     1 AS dispute_count,
-    IF(f.intake_dt >= b.shift_date, TRUE, FALSE) AS is_post_shift
+    f.intake_dt >= r.regime_start AS is_surge
   FROM finserv_risk_ops.fct_consumer_disputes AS f
-  CROSS JOIN primary_surge_breakpoint AS b
+  CROSS JOIN primary_surge_regime AS r
   WHERE f.reg_e_elig_flg = 1
-    AND f.intake_dt BETWEEN DATE_SUB(b.shift_date, INTERVAL 60 DAY)
-                        AND DATE_ADD(b.shift_date, INTERVAL 60 DAY)
+    AND f.intake_dt BETWEEN DATE_SUB(r.regime_start, INTERVAL r.regime_days DAY)
+                        AND r.regime_end
 )
 SELECT
   drivers AS contributing_segment_drivers,
-  metric_interest AS post_shift_disputes,
-  metric_reference AS pre_shift_disputes,
+  metric_interest AS surge_window_disputes,
+  metric_reference AS baseline_window_disputes,
   difference AS net_dispute_change,
   ROUND(relative_difference * 100, 1) AS pct_growth,
   ROUND(unexpected_difference, 1) AS unexpected_excess_disputes,
@@ -121,7 +129,7 @@ SELECT
 FROM AI.KEY_DRIVERS(
   (SELECT * FROM dispute_comparison_window),
   metric_col => 'dispute_count',
-  interest_label_col => 'is_post_shift',
+  interest_label_col => 'is_surge',
   dimension_cols => [
     'prod_line_cd',
     'sub_prod_cd',

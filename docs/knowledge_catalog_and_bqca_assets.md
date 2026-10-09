@@ -10,8 +10,8 @@ Create these terms in **Dataplex / Knowledge Catalog > Glossaries** (or inside t
 
 | Glossary Term | Synonyms (comma-separated) | Authoritative Business Definition (Copy-Paste) | Linked BigQuery Columns |
 | :--- | :--- | :--- | :--- |
-| **Reg E Qualifying Dispute** | `Reg E dispute`, `Regulation E claim`, `electronic fund transfer dispute`, `unauthorized EFT` | A consumer dispute governed by the Electronic Fund Transfer Act (Regulation E) involving unauthorized electronic fund transfers, mobile wallet transactions, P2P money transfers, debit/prepaid cards, or digital account fraud. Identified in `fct_consumer_disputes` where `reg_e_elig_flg = 1`, and aggregated daily in `agg_daily_risk_kpis.reg_e_dispute_vol`. | `fct_consumer_disputes.reg_e_elig_flg`, `agg_daily_risk_kpis.reg_e_dispute_vol` |
-| **Tier-2 Customer Escalation** | `Tier-2 escalation`, `supervisory review`, `escalated dispute`, `disputed resolution` | A consumer dispute that required escalation beyond Tier-1 automated/frontline intake to Tier-2 supervisory compliance review due to consumer rejection of initial findings, untimely response SLA breach, or high-severity fraud allegation. Identified where `cust_esc_tier2_flg = 1` and tracked as a daily percentage in `agg_daily_risk_kpis.tier2_escalation_rate_pct`. | `fct_consumer_disputes.cust_esc_tier2_flg`, `agg_daily_risk_kpis.tier2_escalation_rate_pct` |
+| **Reg E Qualifying Dispute** | `Reg E dispute`, `Regulation E claim`, `electronic fund transfer dispute`, `unauthorized EFT` | A consumer dispute on an account or service covered by the Electronic Fund Transfer Act (Regulation E, 12 CFR 1005): checking/savings and other deposit services (excluding CDs), Reg E prepaid accounts (general-purpose, government benefit, payroll, student prepaid), mobile/digital wallets, and domestic or international money transfers. Credit cards are excluded (Regulation Z), as are gift cards, virtual currency, money orders, and check cashing. Identified in `fct_consumer_disputes` where `reg_e_elig_flg = 1`, and aggregated daily in `agg_daily_risk_kpis.reg_e_dispute_vol`. | `fct_consumer_disputes.reg_e_elig_flg`, `agg_daily_risk_kpis.reg_e_dispute_vol` |
+| **Tier-2 Customer Escalation** | `Tier-2 escalation`, `supervisory review`, `escalated dispute`, `specialist review` | A proxy for disputes that needed specialist or supervisory review beyond Tier-1 intake: the institution breached the timely-response SLA, the response was marked untimely, or the issue is a fraud / scam / unauthorized-transaction claim. (The CFPB `consumer_disputed` field is not used because it has not been published since April 2017.) Identified where `cust_esc_tier2_flg = 1` and tracked as a daily percentage in `agg_daily_risk_kpis.tier2_escalation_rate_pct`. | `fct_consumer_disputes.cust_esc_tier2_flg`, `agg_daily_risk_kpis.tier2_escalation_rate_pct` |
 | **Monetary Relief Ratio** | `monetary relief rate`, `cash redress rate`, `upheld with financial relief`, `reimbursement rate` | The percentage of consumer disputes closed with direct monetary reimbursement or fee reversal (`res_disp_cd = 'Closed with monetary relief'`). Tracked at the case level via `mon_rel_ind = 1` and as a daily percentage in `agg_daily_risk_kpis.monetary_relief_rate_pct`. | `fct_consumer_disputes.mon_rel_ind`, `agg_daily_risk_kpis.monetary_relief_rate_pct` |
 | **Intake-to-Network Routing Lag** | `routing lag`, `forwarding lag`, `intake latency`, `queue routing delay` | The number of calendar days elapsed between initial dispute intake (`intake_dt`) and forwarding to the bank's operational resolution queue (`network_fwd_dt`). Tracked at the case level in `intake_fwd_lag_days` and averaged daily in `agg_daily_risk_kpis.avg_intake_fwd_lag_days`. | `fct_consumer_disputes.intake_fwd_lag_days`, `agg_daily_risk_kpis.avg_intake_fwd_lag_days` |
 | **Regulatory SLA Breach** | `SLA breach`, `untimely response`, `late compliance response` | Failure to provide a formal resolution within the mandated regulatory response window (`timely_response = FALSE`). Identified where `sla_breach_flg = 1` and tracked as a daily percentage in `agg_daily_risk_kpis.sla_breach_rate_pct`. | `fct_consumer_disputes.sla_breach_flg`, `agg_daily_risk_kpis.sla_breach_rate_pct` |
@@ -72,9 +72,9 @@ You are the Consumer Banking & Payments Risk Operations Data Agent. Follow these
   ),
   detected_regimes AS (
     SELECT
-      DATE(begin_timestamp) AS shift_date,
-      metrics.avg AS regime_avg,
-      metrics.count AS regime_days
+      DATE(begin_timestamp) AS regime_start,
+      DATE(end_timestamp) AS regime_end,
+      metrics.avg AS regime_avg
     FROM ML.DETECT_CHANGE_POINTS(
       TABLE daily_reg_e,
       data_col => 'total_reg_e_disputes',
@@ -82,8 +82,11 @@ You are the Consumer Banking & Payments Risk Operations Data Agent. Follow these
     )
     WHERE begin_timestamp IS NOT NULL
   ),
-  primary_surge_breakpoint AS (
-    SELECT shift_date
+  primary_surge_regime AS (
+    SELECT
+      regime_start,
+      regime_end,
+      DATE_DIFF(regime_end, regime_start, DAY) + 1 AS regime_days
     FROM detected_regimes
     ORDER BY regime_avg DESC
     LIMIT 1
@@ -96,17 +99,17 @@ You are the Consumer Banking & Payments Risk Operations Data Agent. Follow these
       f.subm_chnl_cd,
       f.jur_state_cd,
       1 AS dispute_count,
-      IF(f.intake_dt >= b.shift_date, TRUE, FALSE) AS is_post_shift
+      f.intake_dt >= r.regime_start AS is_surge
     FROM finserv_risk_ops.fct_consumer_disputes AS f
-    CROSS JOIN primary_surge_breakpoint AS b
+    CROSS JOIN primary_surge_regime AS r
     WHERE f.reg_e_elig_flg = 1
-      AND f.intake_dt BETWEEN DATE_SUB(b.shift_date, INTERVAL 60 DAY)
-                          AND DATE_ADD(b.shift_date, INTERVAL 60 DAY)
+      AND f.intake_dt BETWEEN DATE_SUB(r.regime_start, INTERVAL r.regime_days DAY)
+                          AND r.regime_end
   )
   SELECT
     drivers AS contributing_segment_drivers,
-    metric_interest AS post_shift_disputes,
-    metric_reference AS pre_shift_disputes,
+    metric_interest AS surge_window_disputes,
+    metric_reference AS baseline_window_disputes,
     difference AS net_dispute_change,
     ROUND(relative_difference * 100, 1) AS pct_growth,
     ROUND(unexpected_difference, 1) AS unexpected_excess_disputes,
@@ -114,7 +117,7 @@ You are the Consumer Banking & Payments Risk Operations Data Agent. Follow these
   FROM AI.KEY_DRIVERS(
     (SELECT * FROM dispute_comparison_window),
     metric_col => 'dispute_count',
-    interest_label_col => 'is_post_shift',
+    interest_label_col => 'is_surge',
     dimension_cols => [
       'prod_line_cd',
       'sub_prod_cd',

@@ -8,6 +8,7 @@
 [![Causal Inference & Time Series](https://img.shields.io/badge/Causal%20AI-Change%20Points%20%7C%20Key%20Drivers%20%7C%20Causal%20Effect-8E24AA)](https://cloud.google.com/bigquery/docs/reference/standard-sql/bigqueryml-syntax-causal-effect)
 [![Domain](https://img.shields.io/badge/FinServ-Reg%20E%20%26%20Payments%20Risk%20Ops-00897B)](https://www.consumerfinance.gov/data-research/consumer-complaints/)
 [![Zero Cluster](https://img.shields.io/badge/Serverless-100%25%20In--Warehouse%20SQL-0288D1)](#tldr)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 An end-to-end, 100% GCP-native reference implementation for **Financial Services Consumer Banking & Payments Risk Operations** that combines all six **BigQuery Augmented Analytics Table-Valued Functions (TVFs)** (`ML.TREND`, `ML.SEASONALITY`, `ML.CORRELATION`, `ML.DETECT_CHANGE_POINTS`, `AI.KEY_DRIVERS`, and `AI.CAUSAL_EFFECT`) with **Knowledge Catalog (Dataplex)** semantic governance and **BigQuery Conversational Analytics (BQCA)** Data Agents. Everything runs inside BigQuery via the **Google Cloud Console** (or Cloud Shell) with **zero Terraform, zero Makefiles, zero notebooks, and zero hardcoded GCP project IDs**.
 
@@ -19,6 +20,7 @@ An end-to-end, 100% GCP-native reference implementation for **Financial Services
 | [Architecture](#architecture) | [Verifying It Worked](#verifying-it-worked) |
 | [Official GCP Documentation Reference](#official-gcp-documentation-reference) | [Troubleshooting & SQL Gotchas](#troubleshooting--sql-gotchas) |
 | [Prerequisites](#prerequisites) | [Cost Breakdown & Cleanup](#cost-breakdown--cleanup) |
+| [Assumptions & Honest Caveats](#assumptions--honest-caveats) | [License](#license) |
 
 ---
 
@@ -54,6 +56,9 @@ bq query --location=US --use_legacy_sql=false < sql/02_act1_baseline_trend_seaso
 bq query --location=US --use_legacy_sql=false < sql/03_act2_change_points_and_key_drivers_chain.sql
 bq query --location=US --use_legacy_sql=false < sql/04_act3_intervention_causal_effect.sql
 bq query --location=US --use_legacy_sql=false < sql/05_enrich_metadata_for_knowledge_catalog.sql
+
+# When you are done: drop everything
+bq query --location=US --use_legacy_sql=false < sql/99_teardown.sql
 ```
 
 </details>
@@ -196,10 +201,12 @@ bq-agentic-analytics-finserv-tvfs/
 │   ├── 03_act2_change_points_and_key_drivers_chain.sql    # Act 2: ML.DETECT_CHANGE_POINTS chained into AI.KEY_DRIVERS
 │   ├── 04_act3_intervention_causal_effect.sql             # Act 3: Counterfactual AI.CAUSAL_EFFECT (summary, time series & multi-series)
 │   ├── 05_enrich_metadata_for_knowledge_catalog.sql       # DDL: Populates authoritative table & column descriptions
-│   └── 06_audit_bqca_agent_jobs.sql                       # Audit: Verifies agent TVF calls via `region-us`.INFORMATION_SCHEMA.JOBS
+│   ├── 06_audit_bqca_agent_jobs.sql                       # Audit: Verifies agent TVF calls via `region-us`.INFORMATION_SCHEMA.JOBS
+│   └── 99_teardown.sql                                    # Cleanup: DROP SCHEMA finserv_risk_ops CASCADE
 ├── docs/
 │   └── knowledge_catalog_and_bqca_assets.md               # Copy-paste Glossary Terms, Agent Instructions & Verified Queries
-└── images/                                                # High-DPI architecture & TVF reference diagrams
+├── images/                                                # High-DPI architecture & TVF reference diagrams
+└── LICENSE                                                # Apache License 2.0
 ```
 
 | File Path | Purpose |
@@ -211,6 +218,7 @@ bq-agentic-analytics-finserv-tvfs/
 | [`sql/04_act3_intervention_causal_effect.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/04_act3_intervention_causal_effect.sql) | Act 3: Counterfactual `AI.CAUSAL_EFFECT` (summary, time series, and multi-series `id_cols`) |
 | [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) | DDL: Populates authoritative table and column descriptions for Knowledge Catalog & BQCA |
 | [`sql/06_audit_bqca_agent_jobs.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/06_audit_bqca_agent_jobs.sql) | Audit: Verifies agent TVF execution via `` `region-us`.INFORMATION_SCHEMA.JOBS `` |
+| [`sql/99_teardown.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/99_teardown.sql) | Cleanup: drops the `finserv_risk_ops` dataset and lists Console-only resources to delete |
 | [`docs/knowledge_catalog_and_bqca_assets.md`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/docs/knowledge_catalog_and_bqca_assets.md) | Copy-paste Knowledge Catalog Business Glossary terms, Agent Instructions, and Verified Queries |
 | [`images/`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/tree/main/images) | High-DPI architecture and 6-TVF reference diagrams (`diagram_1`–`diagram_4`, `table_1`–`table_2`) |
 
@@ -218,7 +226,7 @@ bq-agentic-analytics-finserv-tvfs/
 
 ## Data Model & Cryptic Banking Schema
 
-[`sql/01_setup_finserv_risk_mart.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/01_setup_finserv_risk_mart.sql) transforms the public **CFPB Consumer Complaint Database** (`bigquery-public-data.cfpb_complaints.complaint_database`, `2018-01-01` to `2022-12-31`) into two analytical tables inside `finserv_risk_ops` (**2,275,283** total dispute cases, **336,345** Reg E qualifying electronic payment/deposit/card disputes, and **16,407** daily product-line rollup rows across 9 product lines):
+[`sql/01_setup_finserv_risk_mart.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/01_setup_finserv_risk_mart.sql) transforms the public **CFPB Consumer Complaint Database** (`bigquery-public-data.cfpb_complaints.complaint_database`, `2018-01-01` to `2022-12-31`) into two analytical tables inside `finserv_risk_ops` (**2,275,283** total dispute cases, **182,279** Reg E-scope disputes on deposit, Reg E prepaid, mobile-wallet and money-transfer accounts, and **16,407** daily product-line rollup rows across 9 product lines):
 
 ```
 bigquery-public-data.cfpb_complaints.complaint_database  (Location: US)
@@ -240,9 +248,9 @@ finserv_risk_ops.fct_consumer_disputes  (PARTITION BY DATE_TRUNC(intake_dt, MONT
         ├── vuln_cohort_tag      (STRING)   Vulnerable cohort tag ('Older American', 'Servicemember', 'StandardCohort')
         ├── res_disp_cd          (STRING)   Resolution disposition code
         ├── sla_breach_flg       (INT64)    1 = Untimely response SLA breach; 0 = Compliant
-        ├── cust_esc_tier2_flg   (INT64)    1 = Escalated to Tier-2 supervisory review; 0 = Tier-1
+        ├── cust_esc_tier2_flg   (INT64)    PROXY: 1 = SLA breach / untimely response / fraud-scam-unauthorized claim; 0 = Tier-1
         ├── mon_rel_ind          (INT64)    1 = Closed with monetary relief reimbursement; 0 = Other
-        ├── reg_e_elig_flg       (INT64)    1 = Regulation E (deposit/card/money-transfer/EFT) scope; 0 = Non-Reg E
+        ├── reg_e_elig_flg       (INT64)    1 = Reg E scope (deposit excl. CDs, Reg E prepaid, mobile wallet, money transfer); credit cards excluded (Reg Z)
         ├── intake_fwd_lag_days  (INT64)    Routing lag in days between intake_dt and network_fwd_dt (clamped to [0, 90])
         └── est_ops_cost_usd     (NUMERIC)  Deterministic operational servicing & settlement cost in USD
         |
@@ -281,7 +289,7 @@ Every step below uses the **Google Cloud Console** and works in any GCP project 
 2. **Inspect the three query results:**
    * **Query 1A (`ML.TREND`):** Extracts `smoothed_long_term_trend` (`ROUND(trend, 2)`) on `total_reg_e_disputes` using `smoothing_window_size => 14` and `adjust_step_changes => TRUE`.
    * **Query 1B (`ML.SEASONALITY`):** Decomposes `total_reg_e_disputes` into `yearly_seasonality_effect`, `monthly_seasonality_effect`, and `weekly_seasonality_effect` (`seasonalities => ['Yearly', 'Monthly', 'Weekly']`).
-   * **Query 1C (`ML.CORRELATION`):** Computes the Pearson correlation (`correlation`) between `total_ops_cost_usd` (`target_col`) and five operational risk KPIs sliced by `dimension_cols => ['prod_line_cd']` (filtering `AND NOT IS_NAN(correlation)`). Confirms that `reg_e_dispute_vol` is the #1 operational cost driver in `Credit card or prepaid card` (**`r = 0.9601`**), `Money transfer, virtual currency, or money service` (**`r = 0.9536`**), and `Checking or savings account` (**`r = 0.9163`**).
+   * **Query 1C (`ML.CORRELATION`):** Computes the Pearson correlation (`correlation`) between `total_ops_cost_usd` (`target_col`) and five operational risk KPIs sliced by `dimension_cols => ['prod_line_cd']` (filtering `AND NOT IS_NAN(correlation)`). `reg_e_dispute_vol` tops the list in `Money transfer, virtual currency, or money service` (**`r = 0.9405`**) and `Checking or savings account` (**`r = 0.9141`**), and is weaker in `Credit card or prepaid card` (**`r = 0.5926`**) where only the prepaid sub-products are Reg E. ⚠️ `est_ops_cost_usd` is a *constructed* cost model built from these same flags, so high correlations partly confirm the model by construction (see [Assumptions & Honest Caveats](#assumptions--honest-caveats)).
 
 ---
 
@@ -289,18 +297,19 @@ Every step below uses the **Google Cloud Console** and works in any GCP project 
 
 1. Open a new SQL tab, paste [`sql/03_act2_change_points_and_key_drivers_chain.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/03_act2_change_points_and_key_drivers_chain.sql), and click **Run**.
 2. **Inspect the two query results:**
-   * **Query 2A (`ML.DETECT_CHANGE_POINTS`):** Pinpoints two statistically significant structural surge regimes in daily Reg E disputes: **`2020-05-26` to `2020-06-05`** (11 days, averaging **242.0 disputes/day**) and **`2022-05-01` to `2022-05-16`** (16 days, averaging **200.9 disputes/day**, peaking at **340.0/day**).
-   * **Query 2B (`ML.DETECT_CHANGE_POINTS` → `AI.KEY_DRIVERS`):** Dynamically selects the highest-average regime breakpoint (`shift_date = 2020-05-26`), labels a $\pm 60$-day window around `shift_date` (`is_post_shift`), and runs `AI.KEY_DRIVERS` (`enable_pruning => TRUE`, `top_k => 15`) across 5 dimensions. Surfaces `Money transfer, virtual currency, or money service` (**`+86.3%` growth, `+915.2` unexpected excess disputes**; **`+91.7%`** via `Web`) and `Checking or savings account` (**`+31.7%` growth, `+596.0` unexpected excess disputes**) as the primary root causes of the `+21.0%` (`+2,329` dispute) surge.
+   * **Query 2A (`ML.DETECT_CHANGE_POINTS`):** Detects four short regimes in daily Reg E disputes (overall average **99.9/day**): **`2020-05-25`→`05-28`** (111.5/day), **`2021-05-04`→`05-19`** (16 days, **161.1/day**, the highest), **`2022-05-02`→`05-16`** (123.4/day) and **`2022-06-25`→`07-05`** (97.2/day). These are 4–16-day surges, not lasting regime changes.
+   * **Query 2B (`ML.DETECT_CHANGE_POINTS` → `AI.KEY_DRIVERS`):** Picks the highest-average regime (**`2021-05-04`→`2021-05-19`**), compares disputes **inside** it with an **equal-length 16-day window immediately before** it (`is_surge`), and runs `AI.KEY_DRIVERS` (`enable_pruning => TRUE`, `top_k => 15`) across 5 dimensions. Total Reg E disputes rose **`+423` (`+19.6%`)**. Practically all of it came from `Checking or savings account` (**`+424`, `+33.6%`, `+425.4` unexpected**), concentrated in `Checking account × Managing an account` (**`+61.0%`**) and the `Referral` channel (**`+49.5%`**). Money transfer / mobile wallet was flat (`+4.4%`, `−160.1` vs. expected).
 
 ---
 
 ### Step 4 — Act 3: Quantify Counterfactual Impact with `AI.CAUSAL_EFFECT` ([`sql/04_act3_intervention_causal_effect.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/04_act3_intervention_causal_effect.sql))
 
 1. Open a new SQL tab, paste [`sql/04_act3_intervention_causal_effect.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/04_act3_intervention_causal_effect.sql), and click **Run**.
-2. **Inspect the three query results (evaluating the July 1, 2020 P2P & Web fraud-control rollout):**
-   * **Query 3A (`output_time_series => FALSE`):** Proves that the July 1, 2020 intervention prevented **`-4,694` cumulative Reg E disputes** relative to the synthetic pre-intervention counterfactual (**`-20.31%` relative reduction, `93.56%` posterior causal confidence, `p = 0.064447`**).
+2. **Inspect the four query results (evaluating a *hypothetical* July 1, 2020 fraud-control rollout; no such policy exists in the CFPB data):**
+   * **Query 3A (`output_time_series => FALSE`):** Cumulative effect on Reg E disputes of **`−1,573` (`−13.31%`)**, but only **`40.52%` causal confidence (`p = 0.594848`)**. **No credible evidence of an effect.**
    * **Query 3B (`output_time_series => TRUE`):** Outputs the pointwise time series (`total_reg_e_disputes`, `predicted_counterfactual_disputes`, `counterfactual_lower_95`, `counterfactual_upper_95`). Switch the BigQuery Studio results pane from **Table** to **Chart** (Line chart) to visualize observed vs. counterfactual volume!
-   * **Query 3C (`id_cols => ['prod_line_cd']`):** Runs parallel counterfactual models per banking product line, proving that the largest statistically significant cost reduction occurred in **`Money transfer, virtual currency, or money service`** (**`-$205,510.65` cumulative savings, `-34.38%`, `91.12%` causal confidence, `p = 0.0888`**).
+   * **Query 3C (`id_cols => ['prod_line_cd']`):** Parallel counterfactual models per product line. The only suggestive signal is **`Money transfer, virtual currency, or money service`** (**`−$188,165.11`, `−33.42%`, `90.93%` confidence, `p = 0.0907`**), which is suggestive but not significant at `p < 0.05`. Every other product line has `p > 0.32`.
+   * **Query 3D (the naive trap):** A plain pre/post average says daily Reg E disputes went **up `+22.47%`** (89.9 → 110.1/day), which would read as "the policy failed". The counterfactual says "no detectable effect either way". That gap is the whole point of using `AI.CAUSAL_EFFECT`.
 
 ---
 
@@ -315,7 +324,7 @@ Every step below uses the **Google Cloud Console** and works in any GCP project 
 
 ### Step 6 — Enrich Metadata & Configure Knowledge Catalog ([`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql))
 
-1. **Enrich Schema Metadata via SQL:** Open a BigQuery Studio SQL tab, paste [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql), and click **Run**. Refresh `fct_consumer_disputes` and `agg_daily_risk_kpis` → **Schema** to see the authoritative business descriptions on all 28 columns.
+1. **Enrich Schema Metadata via SQL:** Open a BigQuery Studio SQL tab, paste [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql), and click **Run**. Refresh `fct_consumer_disputes` and `agg_daily_risk_kpis` → **Schema** to see the authoritative business descriptions on all 29 columns (19 + 10).
 2. **Generate Data Profile & Data Insights:** On both tables, open the **Data profile** and **Insights** tabs in BigQuery Studio and click **Generate**.
 3. **Create the Business Glossary (`FinServ_Risk_Glossary`):**
    * Navigate to **Dataplex → Knowledge Catalog → Glossaries** in the Console.
@@ -343,10 +352,10 @@ SELECT
   SUM(cust_esc_tier2_flg) AS tier2_escalations,
   SUM(mon_rel_ind) AS monetary_relief_cases
 FROM finserv_risk_ops.fct_consumer_disputes;
--- Expected: 2,275,283 total_disputes | 336,345 reg_e_disputes | 56,746 tier2_escalations | 67,220 monetary_relief_cases
+-- Expected: 2,275,283 total_disputes | 182,279 reg_e_disputes | 56,746 tier2_escalations | 67,220 monetary_relief_cases
 ```
 
-### 2. Confirm All 28 Column Descriptions Are Populated in `INFORMATION_SCHEMA`
+### 2. Confirm All 29 Column Descriptions Are Populated in `INFORMATION_SCHEMA`
 
 ```sql
 SELECT
@@ -378,4 +387,26 @@ ORDER BY table_name, column_name;
 ## Cost Breakdown & Cleanup
 
 * **Estimated Cost:** **$0.00** within BigQuery's 1 TiB/month free query tier and 10 GiB/month free storage tier ([`sql/01_setup_finserv_risk_mart.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/01_setup_finserv_risk_mart.sql) scans ~1.2 GB once; [`sql/02`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/02_act1_baseline_trend_seasonality_correlation.sql)–[`sql/04`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/04_act3_intervention_causal_effect.sql) scan < 150 MB total; $0.00 when idle).
-* **Cleanup:** Delete the `finserv_risk_ops` dataset in BigQuery Studio (or run `bq rm -r -f -d finserv_risk_ops` in Cloud Shell), delete `FinServ_Payments_Risk_Agent` in **BigQuery → Agents**, and delete `FinServ_Risk_Glossary` in **Knowledge Catalog → Glossaries**.
+* **Cleanup:** Run [`sql/99_teardown.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/99_teardown.sql) (`DROP SCHEMA IF EXISTS finserv_risk_ops CASCADE`), then delete `FinServ_Payments_Risk_Agent` in **BigQuery → Agents**, `FinServ_Risk_Glossary` in **Knowledge Catalog → Glossaries**, and any Data Profile / Data Insights scans.
+
+---
+
+## Assumptions & Honest Caveats
+
+This is a teaching blueprint on public data. Read the results with these in mind:
+
+| Topic | What the repo does | Why it matters |
+| :--- | :--- | :--- |
+| **Reg E scope** | `reg_e_elig_flg` covers deposit accounts (excl. CDs), Reg E prepaid (general-purpose, government benefit, payroll, student), mobile wallets, and domestic/international money transfers | Credit cards fall under **Regulation Z**, not Reg E, so they are excluded. Gift cards, virtual currency, money orders and check cashing are excluded too. |
+| **Tier-2 escalation** | A **proxy**: SLA breach, untimely response, or fraud / scam / unauthorized issue | The CFPB `consumer_disputed` field has been **0% populated since 2018** (published only until April 2017), so it is not used. The proxy overlaps with fraud-type issues. |
+| **Operational cost** | `est_ops_cost_usd` = \$45 + \$35·RegE + \$8.50·lag days + \$120·Tier-2 + \$165·monetary relief | It is **constructed**, not observed. High `ML.CORRELATION` values between cost and these drivers partly confirm the model by construction. |
+| **Intervention date** | `2020-07-01` in [`sql/04`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/04_act3_intervention_causal_effect.sql) | **Hypothetical.** It sits right after a spike, so mean reversion is a real confounder. The live result is *no credible portfolio effect* (`p = 0.59`). |
+| **"Causal confidence"** | `prob_causal_effect × 100` from `AI.CAUSAL_EFFECT` | A model-based posterior probability, not proof. Judge it together with `p_value` and the counterfactual chart (Query 3B). |
+| **Change points** | `ML.DETECT_CHANGE_POINTS` on daily Reg E totals | The detected regimes last 4–16 days. Treat them as surges, not permanent structural shifts. |
+| **Agent audit** | [`sql/06`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/06_audit_bqca_agent_jobs.sql) filters `ca-bq-job = 'true'` | Validated against labeled jobs in a test project. Your results depend on Conversational Analytics actually running in your project. |
+
+---
+
+## License
+
+Released under the [Apache License 2.0](LICENSE). The CFPB Consumer Complaint Database is public data published by the U.S. Consumer Financial Protection Bureau.

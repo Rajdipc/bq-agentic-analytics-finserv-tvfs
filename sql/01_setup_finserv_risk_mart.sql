@@ -60,12 +60,15 @@ WITH base_complaints AS (
     -- Regulatory SLA Breach Flag (1 = Untimely response, 0 = Timely)
     IF(timely_response IS FALSE, 1, 0) AS sla_breach_flg,
 
-    -- Tier-2 Customer Escalation Flag
-    -- Triggered when the consumer formally disputes the resolution, when
-    -- the response breached regulatory SLA, or when escalated to supervisory review
+    -- Tier-2 Specialist Escalation Flag (PROXY)
+    -- The public CFPB `consumer_disputed` field stopped being populated after
+    -- April 2017 (0% coverage for 2018-2022), so it is NOT used here. Instead we
+    -- proxy "needed specialist / supervisory review" as: the institution breached
+    -- the timely-response SLA, the response was marked untimely, or the issue is
+    -- a fraud / scam / unauthorized-transaction claim (which banks typically route
+    -- to a specialist fraud-ops queue).
     IF(
-      consumer_disputed IS TRUE
-      OR timely_response IS FALSE
+      timely_response IS FALSE
       OR LOWER(COALESCE(company_response_to_consumer, '')) LIKE '%untimely%'
       OR LOWER(COALESCE(issue, '')) LIKE '%fraud%'
       OR LOWER(COALESCE(issue, '')) LIKE '%scam%'
@@ -81,26 +84,43 @@ WITH base_complaints AS (
       0
     ) AS mon_rel_ind,
 
-    -- Regulation E (Electronic Fund Transfers) / Digital Payment Qualifying Dispute Flag
-    -- Scoped to consumer deposit, payment, card, and money transfer products
-    -- (excluding FCRA credit bureau reporting complaints)
+    -- Regulation E (12 CFR 1005, Electronic Fund Transfers) Scope Flag
+    -- Strictly scoped to consumer EFT-capable asset accounts and EFT services:
+    --   * Checking / savings / other deposit services (CDs excluded: time deposits
+    --     are rarely EFT-accessed)
+    --   * Prepaid accounts covered by the Reg E Prepaid Rule (general-purpose,
+    --     government benefit, payroll, student prepaid). Gift cards are excluded
+    --     (separate Reg E gift-card provisions, no error-resolution rights).
+    --   * Mobile / digital wallets and domestic & international (remittance)
+    --     money transfers.
+    -- Deliberately EXCLUDED:
+    --   * Credit cards (general-purpose and store) - governed by Regulation Z
+    --     (TILA / Fair Credit Billing Act), NOT Regulation E.
+    --   * Virtual currency, money orders, traveler's checks, check cashing,
+    --     currency exchange, refund anticipation checks, debt settlement.
+    --   * FCRA credit-reporting complaints (Regulation V).
     IF(
-      LOWER(COALESCE(product, '')) NOT LIKE '%credit reporting%'
-      AND (
-        LOWER(COALESCE(product, '')) IN (
-          'checking or savings account',
-          'money transfer, virtual currency, or money service',
-          'prepaid card',
-          'credit card or prepaid card',
-          'bank account or service'
+      (
+        LOWER(COALESCE(product, '')) IN ('checking or savings account', 'bank account or service')
+        AND LOWER(COALESCE(subproduct, '')) NOT LIKE 'cd (certificate of deposit)%'
+      )
+      OR LOWER(COALESCE(product, '')) = 'prepaid card'
+      OR (
+        LOWER(COALESCE(product, '')) = 'credit card or prepaid card'
+        AND LOWER(COALESCE(subproduct, '')) IN (
+          'general-purpose prepaid card',
+          'government benefit card',
+          'payroll card',
+          'student prepaid card'
         )
-        OR LOWER(COALESCE(subproduct, '')) LIKE '%mobile%'
-        OR LOWER(COALESCE(subproduct, '')) LIKE '%virtual%'
-        OR LOWER(COALESCE(subproduct, '')) LIKE '%debit%'
-        OR LOWER(COALESCE(subproduct, '')) LIKE '%eft%'
-        OR LOWER(COALESCE(issue, '')) LIKE '%unauthorized%'
-        OR LOWER(COALESCE(issue, '')) LIKE '%fraud%'
-        OR LOWER(COALESCE(issue, '')) LIKE '%scam%'
+      )
+      OR (
+        LOWER(COALESCE(product, '')) = 'money transfer, virtual currency, or money service'
+        AND LOWER(COALESCE(subproduct, '')) IN (
+          'mobile or digital wallet',
+          'domestic (us) money transfer',
+          'international money transfer'
+        )
       ),
       1,
       0

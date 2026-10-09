@@ -17,10 +17,16 @@
 -- Query 3A: Executive Causal Lift Summary (`output_time_series => FALSE`)
 -- ----------------------------------------------------------------------------
 -- Business Question:
---   "Following the emergency P2P & Web fraud-control rollout on July 1, 2020
---    (deployed in response to the May 26 surge), how many Reg E disputes were
---    prevented relative to the synthetic pre-intervention counterfactual, and
---    is the causal effect statistically significant?"
+--   "Suppose the bank rolled out a P2P & Web fraud-control change on
+--    July 1, 2020, right after the May 2020 surge. Relative to a synthetic
+--    counterfactual built from the pre-intervention trend, did Reg E dispute
+--    volume actually change, and is the effect statistically credible?"
+--
+-- IMPORTANT: July 1, 2020 is a HYPOTHETICAL, illustrative intervention date.
+--   No such policy exists in the public CFPB data. Treat outputs as a
+--   demonstration of the method, not as evidence about any real bank policy.
+--   Picking a date right after a spike also invites regression-to-the-mean,
+--   which is exactly why a counterfactual model beats a naive average (Query 3D).
 -- ----------------------------------------------------------------------------
 WITH daily_reg_e_window AS (
   SELECT
@@ -127,3 +133,33 @@ FROM AI.CAUSAL_EFFECT(
 )
 WHERE status = ''
 ORDER BY ABS(absolute_effect) DESC;
+
+
+-- ----------------------------------------------------------------------------
+-- Query 3D: THE TRAP - Naive Before/After Average (for comparison only)
+-- ----------------------------------------------------------------------------
+-- Business Question (asked the wrong way):
+--   "Average daily Reg E disputes after July 1, 2020 vs. before - did it drop?"
+--
+-- Why this misleads:
+--   A plain pre/post average ignores the pre-intervention trajectory
+--   (the May-June 2020 surge), seasonality, and normal mean reversion.
+--   Compare this single number with the counterfactual from Query 3A.
+-- ----------------------------------------------------------------------------
+SELECT
+  ROUND(AVG(IF(intake_dt <  '2020-07-01', daily_reg_e, NULL)), 1) AS naive_pre_avg_daily_reg_e,
+  ROUND(AVG(IF(intake_dt >= '2020-07-01', daily_reg_e, NULL)), 1) AS naive_post_avg_daily_reg_e,
+  ROUND(
+    100 * SAFE_DIVIDE(
+      AVG(IF(intake_dt >= '2020-07-01', daily_reg_e, NULL))
+        - AVG(IF(intake_dt < '2020-07-01', daily_reg_e, NULL)),
+      AVG(IF(intake_dt < '2020-07-01', daily_reg_e, NULL))
+    ),
+    2
+  ) AS naive_pct_change
+FROM (
+  SELECT intake_dt, SUM(reg_e_dispute_vol) AS daily_reg_e
+  FROM finserv_risk_ops.agg_daily_risk_kpis
+  WHERE intake_dt BETWEEN '2020-01-01' AND '2020-10-01'
+  GROUP BY intake_dt
+);
