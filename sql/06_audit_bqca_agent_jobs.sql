@@ -11,6 +11,7 @@
 --     - `ca-bq-job: true`
 --     - `data-agent-id: <DATA_AGENT_ID>`
 --     - `conversation-id: <CONVERSATION_ID>`
+--     - `ca-skill: bigquery-ai-ml-ca-rules` (built-in AI/ML TVF syntax skill)
 --
 --   Using unqualified `region-us`.INFORMATION_SCHEMA.JOBS automatically
 --   queries the active project in BigQuery Studio without hardcoding a
@@ -23,6 +24,7 @@ SELECT
   user_email,
   (SELECT value FROM UNNEST(labels) WHERE key = 'data-agent-id') AS data_agent_id,
   (SELECT value FROM UNNEST(labels) WHERE key = 'conversation-id') AS conversation_id,
+  (SELECT value FROM UNNEST(labels) WHERE key = 'ca-skill') AS ca_skill,
   REGEXP_EXTRACT_ALL(
     UPPER(query),
     r'(?:AI|ML)\.(?:KEY_DRIVERS|CAUSAL_EFFECT|CORRELATION|DETECT_CHANGE_POINTS|TREND|SEASONALITY|FORECAST|DETECT_ANOMALIES)'

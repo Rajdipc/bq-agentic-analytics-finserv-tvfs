@@ -63,31 +63,41 @@ Follow the three stages below to enrich your BigQuery tables, generate automated
 
 ### 1.3 Stage 3 — Create `FinServ_Risk_Glossary` and Link Terms to Physical Columns
 
+> **Operational Learning from Live Testing:** Creating the `FinServ_Risk_Glossary` container in the Cloud Console is straightforward, but manually creating 6 terms and linking 13 physical BigQuery columns across two tables through the Console UI can be tedious—or unavailable depending on your Console view. We provide **both** a 1-command Python script ([`scripts/link_knowledge_catalog_glossary.py`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/scripts/link_knowledge_catalog_glossary.py), using only Python stdlib + `gcloud` auth) that creates all 6 terms and binds all 13 column-level `entryLinks` (`entryLinkTypes/definition`) automatically, **and** the manual Console steps below.
+
+#### Option A (Recommended — 10 Seconds via Cloud Shell or Terminal)
+Whether you have already created an empty glossary named `FinServ_Risk_Glossary` in the Console (`Location = US`) or want the script to create it for you, run:
+
+```bash
+python3 scripts/link_knowledge_catalog_glossary.py
+```
+
+What [`scripts/link_knowledge_catalog_glossary.py`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/scripts/link_knowledge_catalog_glossary.py) handles under the hood (and three Dataplex Universal Catalog API gotchas it solves):
+1. **Console Glossary UUID Discovery:** When you create a glossary named `FinServ_Risk_Glossary` in the Cloud Console UI, Dataplex often assigns a generated UUID resource ID (e.g., `projects/<project>/locations/us/glossaries/jklhijkll-...`) rather than `finserv-risk-glossary`. The script lists `locations/us/glossaries` and matches `displayName == "FinServ_Risk_Glossary"` automatically.
+2. **Mandatory `parent` Field in Term Creation:** `POST /v1/{glossary_name}/terms?termId={term_id}` requires `"parent": "{glossary_name}"` inside the JSON request body (omitting it raises `HTTP 400: Term parent must be specified`).
+3. **Numeric `project_number` in `@dataplex` Entry IDs:** Column-to-glossary bindings are stored as Dataplex `EntryLink` resources (`projects/655216118709/locations/global/entryLinkTypes/definition`) in `projects/<project_id>/locations/us/entryGroups/@bigquery/entryLinks`, linking `path: "Schema.<column_name>"` on the `@bigquery` table entry to the `@dataplex` glossary term entry. Dataplex requires the target `@dataplex` entry ID to use the **numeric `project_number`** (`entries/projects/<project_number>/locations/us/glossaries/<glossary_id>/terms/<term_id>`), otherwise it rejects the link with `GLOSSARY_TERM_ENTRY_ID_CONTAINS_PROJECT_ID_ERROR`.
+
+#### Option B (Manual Setup in the Google Cloud Console)
 1. **Create the Business Glossary:**
    * In the Google Cloud Console navigation menu (**☰**), navigate to **Knowledge Catalog → Glossaries** (or under **BigQuery → Governance → Glossaries** / **Dataplex → Glossaries**, depending on your Console layout).
    * Click **+ Create business glossary** (or **+ Create glossary**):
      * **Display name:** `FinServ_Risk_Glossary`
-     * **Glossary ID:** `finserv-risk-glossary` (auto-filled)
-     * **Location:** `US (multi-region)` or `Global`
+     * **Location:** `US (multi-region)`
      * **Description:** `Authoritative Consumer Banking, Payments Operations, and Regulation E (12 CFR 1005) dispute glossary for BigQuery Conversational Analytics.`
    * Click **Create**.
-2. **Add the 6 Business Glossary Terms:**
-   * Open **`FinServ_Risk_Glossary`** and click **+ Create term** (or **+ Add term**) for each of the 6 terms in the table below.
-   * Paste the **Authoritative Business Definition** into the **Description / Overview** box, add the **Synonyms** (or labels), and click **Create**.
-3. **Link Each Term to Its Physical BigQuery Columns:**
-   * In **Knowledge Catalog → Search**, search for `fct_consumer_disputes` and click the entry `<your-project>.finserv_risk_ops.fct_consumer_disputes`.
-   * Open the **Schema** tab inside the Knowledge Catalog entry page.
-   * Select the checkbox next to each target column, click **+ Link glossary term** (or open the column row → **Glossary terms → Add**), and select the matching term from `FinServ_Risk_Glossary` as mapped in the **Linked BigQuery Columns** column below.
-   * Repeat in **Knowledge Catalog → Search** for `<your-project>.finserv_risk_ops.agg_daily_risk_kpis` → **Schema** to link the daily rollup columns.
+2. **Add the 6 Business Glossary Terms & Link Columns:**
+   * Open **`FinServ_Risk_Glossary`** and click **+ Create term** (or **+ Add term**) for each of the 6 terms in the table below, then bind each term to its mapped columns on `fct_consumer_disputes` (6 columns) and `agg_daily_risk_kpis` (7 columns) in **Knowledge Catalog → Search → Schema** (or run `python3 scripts/link_knowledge_catalog_glossary.py` to link all 13 columns automatically).
 
-| Glossary Term | Synonyms (comma-separated) | Authoritative Business Definition (Copy-Paste) | Linked BigQuery Columns |
+| Glossary Term (`term_id`) | Synonyms (comma-separated) | Authoritative Business Definition (Copy-Paste) | Linked BigQuery Columns |
 | :--- | :--- | :--- | :--- |
-| **Reg E Qualifying Dispute** | `Reg E dispute`, `Regulation E claim`, `electronic fund transfer dispute`, `unauthorized EFT` | A consumer dispute on an account or service covered by the Electronic Fund Transfer Act (Regulation E, 12 CFR 1005): checking/savings and other deposit services (excluding CDs), Reg E prepaid accounts (general-purpose, government benefit, payroll, student prepaid), mobile/digital wallets, and domestic or international money transfers. Credit cards are excluded (Regulation Z), as are gift cards, virtual currency, money orders, and check cashing. Identified in `fct_consumer_disputes` where `reg_e_elig_flg = 1`, and aggregated daily in `agg_daily_risk_kpis.reg_e_dispute_vol`. | `fct_consumer_disputes.reg_e_elig_flg`, `agg_daily_risk_kpis.reg_e_dispute_vol` |
-| **Tier-2 Customer Escalation** | `Tier-2 escalation`, `supervisory review`, `escalated dispute`, `specialist review` | A proxy for disputes that needed specialist or supervisory review beyond Tier-1 intake: the institution breached the timely-response SLA, the response was marked untimely, or the issue is a fraud / scam / unauthorized-transaction claim. (The CFPB `consumer_disputed` field is not used because it has not been published since April 2017.) Identified where `cust_esc_tier2_flg = 1` and tracked as a daily percentage in `agg_daily_risk_kpis.tier2_escalation_rate_pct`. | `fct_consumer_disputes.cust_esc_tier2_flg`, `agg_daily_risk_kpis.tier2_escalation_rate_pct` |
-| **Monetary Relief Ratio** | `monetary relief rate`, `cash redress rate`, `upheld with financial relief`, `reimbursement rate` | The percentage of consumer disputes closed with direct monetary reimbursement or fee reversal (`res_disp_cd = 'Closed with monetary relief'`). Tracked at the case level via `mon_rel_ind = 1` and as a daily percentage in `agg_daily_risk_kpis.monetary_relief_rate_pct`. | `fct_consumer_disputes.mon_rel_ind`, `agg_daily_risk_kpis.monetary_relief_rate_pct` |
-| **Intake-to-Network Routing Lag** | `routing lag`, `forwarding lag`, `intake latency`, `queue routing delay` | The number of calendar days elapsed between initial dispute intake (`intake_dt`) and forwarding to the bank's operational resolution queue (`network_fwd_dt`). Tracked at the case level in `intake_fwd_lag_days` and averaged daily in `agg_daily_risk_kpis.avg_intake_fwd_lag_days`. | `fct_consumer_disputes.intake_fwd_lag_days`, `agg_daily_risk_kpis.avg_intake_fwd_lag_days` |
-| **Regulatory SLA Breach** | `SLA breach`, `untimely response`, `late compliance response` | Failure to provide a formal resolution within the mandated regulatory response window (`timely_response = FALSE`). Identified where `sla_breach_flg = 1` and tracked as a daily percentage in `agg_daily_risk_kpis.sla_breach_rate_pct`. | `fct_consumer_disputes.sla_breach_flg`, `agg_daily_risk_kpis.sla_breach_rate_pct` |
-| **Dispute Operational Cost** | `handling cost`, `ops cost`, `dispute servicing cost`, `cost per dispute` | Total estimated operational servicing and settlement processing cost in USD for handling consumer disputes, combining base intake cost ($45), Reg E compliance surcharge ($35), routing lag penalty ($8.50/day), Tier-2 review ($120), and monetary relief processing ($165). | `fct_consumer_disputes.est_ops_cost_usd`, `agg_daily_risk_kpis.total_ops_cost_usd`, `agg_daily_risk_kpis.avg_ops_cost_per_dispute_usd` |
+| **Reg E Qualifying Dispute** (`reg-e-qualifying-dispute`) | `Reg E dispute`, `Regulation E claim`, `electronic fund transfer dispute`, `unauthorized EFT` | A consumer dispute on an account or service covered by the Electronic Fund Transfer Act (Regulation E, 12 CFR 1005): checking/savings and other deposit services (excluding CDs), Reg E prepaid accounts (general-purpose, government benefit, payroll, student prepaid), mobile/digital wallets, and domestic or international money transfers. Credit cards are excluded (Regulation Z), as are gift cards, virtual currency, money orders, and check cashing. Identified in `fct_consumer_disputes` where `reg_e_elig_flg = 1`, and aggregated daily in `agg_daily_risk_kpis.reg_e_dispute_vol`. | `fct_consumer_disputes.reg_e_elig_flg`, `agg_daily_risk_kpis.reg_e_dispute_vol` |
+| **Tier-2 Customer Escalation** (`tier-2-customer-escalation`) | `Tier-2 escalation`, `supervisory review`, `escalated dispute`, `specialist review` | A proxy for disputes that needed specialist or supervisory review beyond Tier-1 intake: the institution breached the timely-response SLA, the response was marked untimely, or the issue is a fraud / scam / unauthorized-transaction claim. (The CFPB `consumer_disputed` field is not used because it has not been published since April 2017.) Identified where `cust_esc_tier2_flg = 1` and tracked as a daily percentage in `agg_daily_risk_kpis.tier2_escalation_rate_pct`. | `fct_consumer_disputes.cust_esc_tier2_flg`, `agg_daily_risk_kpis.tier2_escalation_rate_pct` |
+| **Monetary Relief Ratio** (`monetary-relief-ratio`) | `monetary relief rate`, `cash redress rate`, `upheld with financial relief`, `reimbursement rate` | The percentage of consumer disputes closed with direct monetary reimbursement or fee reversal (`res_disp_cd = 'Closed with monetary relief'`). Tracked at the case level via `mon_rel_ind = 1` and as a daily percentage in `agg_daily_risk_kpis.monetary_relief_rate_pct`. | `fct_consumer_disputes.mon_rel_ind`, `agg_daily_risk_kpis.monetary_relief_rate_pct` |
+| **Intake-to-Network Routing Lag** (`intake-to-network-routing-lag`) | `routing lag`, `forwarding lag`, `intake latency`, `queue routing delay` | The number of calendar days elapsed between initial dispute intake (`intake_dt`) and forwarding to the bank's operational resolution queue (`network_fwd_dt`). Tracked at the case level in `intake_fwd_lag_days` and averaged daily in `agg_daily_risk_kpis.avg_intake_fwd_lag_days`. | `fct_consumer_disputes.intake_fwd_lag_days`, `agg_daily_risk_kpis.avg_intake_fwd_lag_days` |
+| **Regulatory SLA Breach** (`regulatory-sla-breach`) | `SLA breach`, `untimely response`, `late compliance response` | Failure to provide a formal resolution within the mandated regulatory response window (`timely_response = FALSE`). Identified where `sla_breach_flg = 1` and tracked as a daily percentage in `agg_daily_risk_kpis.sla_breach_rate_pct`. | `fct_consumer_disputes.sla_breach_flg`, `agg_daily_risk_kpis.sla_breach_rate_pct` |
+| **Dispute Operational Cost** (`dispute-operational-cost`) | `handling cost`, `ops cost`, `dispute servicing cost`, `cost per dispute` | Total estimated operational servicing and settlement processing cost in USD for handling consumer disputes, combining base intake cost ($45), Reg E compliance surcharge ($35), routing lag penalty ($8.50/day), Tier-2 review ($120), and monetary relief processing ($165). | `fct_consumer_disputes.est_ops_cost_usd`, `agg_daily_risk_kpis.total_ops_cost_usd`, `agg_daily_risk_kpis.avg_ops_cost_per_dispute_usd` |
+
+![Enriched Schema and Linked Glossary Terms in Knowledge Catalog](../images/06_knowledge_catalog_enriched_schema.png)
 
 ---
 
@@ -300,29 +310,40 @@ In the **`FinServ_Payments_Risk_Agent`** builder, click **+ Add verified query**
 
 ---
 
-## 4. "Before vs. After Grounding" Conversational Prompt Script
+## 4. "Before vs. After Grounding" Conversational Prompt Script & Live Findings
 
-### Phase A: The "Before Grounding" Test (Direct Chat on Raw Cryptic Table)
+### Key Engineering Learnings from Live BQCA Testing
+Before running the A/B comparison below, keep three architectural behaviors of BigQuery Conversational Analytics (BQCA) in mind:
+1. **Built-in `ca-skill: bigquery-ai-ml-ca-rules` System Skill:** Every BQCA job carries the system label `ca-skill: bigquery-ai-ml-ca-rules`. That means BQCA **already knows the SQL syntax for `AI.KEY_DRIVERS` and the `ML.*` TVFs out of the box**. An ungrounded agent does not fail because it lacks TVF syntax; it fails on **table routing, statistical methodology (skipping `ML.DETECT_CHANGE_POINTS` for naive `LAG()`), and missing parameter discipline (`enable_pruning => TRUE`)**.
+2. **Substring Matching on Cryptic Identifiers:** Even when column descriptions are blank (`-`), an LLM can still guess that prompt words like *"Reg E"* or *"Tier-2"* map to `reg_e_elig_flg` and `cust_esc_tier2_flg` by matching substrings of the column identifiers (and running 3 exploratory `MIN/MAX(intake_dt)` + `EXTRACT(YEAR FROM intake_dt)` queries first). To genuinely test semantic and methodological grounding, phrase prompts in business/regulatory terms (*"unauthorized electronic fund transfer claims under 12 CFR 1005"*) and require multi-step regime-to-driver attribution.
+3. **Agent & Thread State Isolation:** Editing an existing Data Agent's instructions/tables in-place or re-prompting inside an existing thread reuses cached conversation context. Always create two separate agents (`Demo-FinservRiskOps-Before-Grounding` and `Demo-FinservRiskOps-After-Grounding`) and start a fresh thread in each.
+
+---
+
+### Phase A: The "Before Grounding" Test (`Demo-FinservRiskOps-Before-Grounding`)
 Run this test **before** executing [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) or attaching the Knowledge Catalog Glossary:
 
 1. In **BigQuery → Studio**, click **Agents** (or **Conversational Analytics**) in the left navigation.
-2. Create an ungrounded test agent (e.g., `Demo-FinservRiskOps-Before-Grounding`) with **empty** Agent Instructions and **zero** Verified Queries, attaching **only** `<your-project>.finserv_risk_ops.fct_consumer_disputes` (with its blank column descriptions).
+2. Create an ungrounded test agent (`Demo-FinservRiskOps-Before-Grounding`, e.g., `agent_745b9f55-4641-4860-9f9f-7ff562a46882`) with **empty** Agent Instructions and **zero** Verified Queries, attaching **only** `<your-project>.finserv_risk_ops.fct_consumer_disputes` (with its blank column descriptions).
 3. Submit the following prompt:
 
 > **Prompt:**
 > *"When did daily unauthorized electronic fund transfer claims under 12 CFR 1005 experience their biggest surge, and which product, sub-product, issue, submission channel, and state drove that surge compared to the baseline right before it?"*
 
-4. Expand the generated **SQL** blocks under the agent's reply (see [`images/05_bqca_before_grounding.png`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/images/05_bqca_before_grounding.png)):
-* **Observed "Before Grounding" Failure / Context Gap:**
-  * Even though BQCA's built-in `bigquery-ai-ml-ca-rules` system skill knows the SQL syntax for `AI.KEY_DRIVERS`, without **Verified Query 1** or `agg_daily_risk_kpis`, the ungrounded agent **skips `ML.DETECT_CHANGE_POINTS` entirely**.
-  * Instead, it writes a naive day-over-day `claim_count - LAG(claim_count) OVER (ORDER BY intake_dt) AS dod_diff` query—which mistakes a normal **Monday-vs.-Sunday rebound (`2022-02-28` at 212 claims vs. Sunday `2022-02-27` at 42 claims, `+170`)** for the biggest surge in five years, and then feeds `WHERE intake_dt IN ('2022-02-27', '2022-02-28')` into `AI.KEY_DRIVERS` without `enable_pruning => TRUE`.
+4. Expand the generated **SQL** blocks under the agent's reply (`images/05_bqca_before_grounding.png`). In our live execution (`conversation_id = bff54581-08b2-4403-a0eb-f2065b390675`), the ungrounded agent generated **4 separate SQL queries**:
+   * **SQL #1 (Skips `ML.DETECT_CHANGE_POINTS` for Naive `LAG()`):** Without `agg_daily_risk_kpis` or Verified Query 1, it wrote `claim_count - LAG(claim_count) OVER (ORDER BY intake_dt) AS dod_diff`. Because consumer dispute intake drops every Sunday and rebounds every Monday, `LAG()` mistook a routine **Monday-vs.-Sunday rebound (`2022-02-28` at 212 claims vs. Sunday `2022-02-27` at 42 claims = `+170`)** for the largest surge in five years! (Its top 3 rows—`2022-02-28`, `2022-04-11`, `2022-07-11`—were all Mondays.)
+   * **SQL #2 (Ad-hoc Window Check):** Queried daily counts between `'2022-02-20'` and `'2022-03-05'`.
+   * **SQL #3 (Unpruned `AI.KEY_DRIVERS` on a 2-Day Window):** Invoked `AI.KEY_DRIVERS` on `WHERE intake_dt IN ('2022-02-27', '2022-02-28')` with `(intake_dt = '2022-02-28') AS IS_SURGE`, `min_apriori_support => 0`, `ORDER BY contribution DESC LIMIT 10`, and **omitted `enable_pruning => TRUE`**. Because pruning was off and it sorted by raw `contribution`, Row 1 was the trivial `all` slice, and redundant parent/child slices crowded out every `jur_state_cd` row from the top 10.
+   * **SQL #4 (Manual `GROUP BY jur_state_cd` Fallback):** Because no state appeared in its unpruned `LIMIT 10`, the agent had to run a 4th manual query (`COUNTIF(intake_dt = '2022-02-28') - COUNTIF(intake_dt = '2022-02-27') AS diff GROUP BY jur_state_cd`), reporting `CA` (`28` vs. `7` = `+21`) and `FL` (`+20`).
+
+![Before Grounding Live BQCA Response](../images/05_bqca_before_grounding.png)
 
 ---
 
-### Phase B: The "After Grounding" 3-Turn Executive Investigation (In `FinServ_Payments_Risk_Agent`)
-Once [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) is applied and `FinServ_Payments_Risk_Agent` (or `Demo-FinservRiskOps-After-Grounding`) is saved with the Knowledge Catalog Business Glossary, Instructions, and Verified Queries:
+### Phase B: The "After Grounding" 3-Turn Executive Investigation (`Demo-FinservRiskOps-After-Grounding` / `FinServ_Payments_Risk_Agent`)
+Once [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) and [`scripts/link_knowledge_catalog_glossary.py`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/scripts/link_knowledge_catalog_glossary.py) are applied and your grounded agent (`Demo-FinservRiskOps-After-Grounding`, e.g., `agent_b8b86f33-fd6f-42ef-8fa9-6e6838ee7a05`, or `FinServ_Payments_Risk_Agent`) is saved with both tables, Instructions, and the 3 Verified Queries:
 
-1. In **BigQuery → Studio → Agents**, select your grounded agent and click **Start conversation** (or **+ New chat** so cached pre-enrichment metadata is cleared).
+1. In **BigQuery → Studio → Agents**, select your grounded agent and click **Start conversation** (always start a fresh chat so cached pre-enrichment metadata is cleared).
 2. Run the 3-turn executive investigation below, clicking **View generated SQL** after each response:
 
 * **Turn 1 (Act 1 — Trend, Seasonality & Correlation):**
@@ -331,7 +352,12 @@ Once [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Raj
 
 * **Turn 2 (Act 2 — Structural Change Points & Key Drivers Attribution; Direct Counterpart to Phase A):**
   > *"When did daily unauthorized electronic fund transfer claims under 12 CFR 1005 experience their biggest surge, and which product, sub-product, issue, submission channel, and state drove that surge compared to the baseline right before it?"*
-  * **Expected SQL & Output (see [`images/07_bqca_after_grounding_tvf.png`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/images/07_bqca_after_grounding_tvf.png)):** Displays the green **Verified Query badge (`✓`)** and executes the chained `ML.DETECT_CHANGE_POINTS` → `AI.KEY_DRIVERS` template (VQ-1), identifying the **`2021-05-04` → `2021-05-19`** surge (**`161.1` disputes/day**) and attributing the **`+423` (`+19.6%`)** jump to `Checking or savings account` (**`+424`, `+33.6%`**, `+425.4` unexpected excess) and `Checking account × Managing an account` (**`+61.0%`**), complete with an auto-rendered driver bar chart.
+  * **Observed Live SQL & Output (`conversation_id = d1272cdd-800c-495b-98e8-f5825bc4b172`, see [`images/07_bqca_after_grounding_tvf.png`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/images/07_bqca_after_grounding_tvf.png)):**
+    * Displays the green **Verified Query badge (`✓`)** and executes **2 complementary SQL queries**:
+      1. **Job 1 (`ML.DETECT_CHANGE_POINTS` → `AI.KEY_DRIVERS` from VQ-1):** Chains the detected 16-day surge window (`2021-05-04` to `2021-05-19`) against the equal-length 16-day preceding baseline (`2021-04-18` to `2021-05-03`) into `AI.KEY_DRIVERS` (`top_k => 15, enable_pruning => TRUE`), attributing the surge to `Checking or savings account` (`1,685` vs. `1,261` = **`+424`**, `+33.6%`, `+425.4` unexpected excess) and `Checking account × Managing an account` (`+61.0%`) via `Web`, and auto-rendering the horizontal bar chart (`Top Key Drivers of daily Reg E Dispute Surge (2021-05-04 to 2021-05-19)`).
+      2. **Job 2 (Standalone `ML.DETECT_CHANGE_POINTS` Regime Table):** Because VQ-1's outer `SELECT` returns the `AI.KEY_DRIVERS` rows while the prompt also asked *"When did daily ... claims experience their biggest surge"*, the agent automatically extracts the `ML.DETECT_CHANGE_POINTS` CTE (`ORDER BY regime_avg DESC`) as a second query to display the 4 detected regimes (`2021-05-04 → 2021-05-19` at **`161.06`/day**, `2022-05-02 → 2022-05-16` at `123.40`/day, `2020-05-25 → 2020-05-28` at `111.50`/day, and `2022-06-25 → 2022-07-05` at `97.18`/day).
+
+![After Grounding Live BQCA Response](../images/07_bqca_after_grounding_tvf.png)
 
 * **Turn 3 (Act 3 — Counterfactual Causal Effect):**
   > *"Quantify the causal effect on daily Reg E dispute volume after 2020-07-01 between 2020-01-01 and 2020-10-01, and also break down the causal impact on daily operational cost by banking product line."*
@@ -339,3 +365,7 @@ Once [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Raj
 
 3. **Audit All Agent-Generated TVF Jobs (`sql/06_audit_bqca_agent_jobs.sql`):**
    * Open a SQL editor tab in **BigQuery → Studio**, paste [`sql/06_audit_bqca_agent_jobs.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/06_audit_bqca_agent_jobs.sql), and click **Run** to inspect the `ca-bq-job = 'true'` entries in `` `region-us`.INFORMATION_SCHEMA.JOBS `` (`data_agent_id`, `conversation_id`, `invoked_augmented_analytics_tvfs`, `mb_billed`, `execution_ms`, and `generated_sql`).
+   * As shown in [`images/08_information_schema_audit.png`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/images/08_information_schema_audit.png), Rows 1–2 capture `Demo-FinservRiskOps-After-Grounding` (`agent_b8b86f33...`) invoking `["ML.DETECT_CHANGE_POINTS"]` and `["ML.DETECT_CHANGE_POINTS", "AI.KEY_DRIVERS"]`, while Rows 3–4 capture `Demo-FinservRiskOps-Before-Grounding` (`agent_745b9f55...`) falling back to `0 rows` (manual `GROUP BY jur_state_cd`) and unpruned `["AI.KEY_DRIVERS"]`.
+
+![INFORMATION_SCHEMA.JOBS Audit Trail](../images/08_information_schema_audit.png)
+

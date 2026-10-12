@@ -8,9 +8,13 @@
 --          names to enterprise risk terminology.
 --
 -- When to run:
---   Run this script in the BigQuery Studio SQL Editor AFTER testing the
---   "Before Grounding" prompt (Step 5 in https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/README.md)
---   and as part of Step 6 (Knowledge Catalog & Metadata Grounding).
+--   1. Run this script in the BigQuery Studio SQL Editor AFTER testing the
+--      "Before Grounding" prompt (Step 5 in https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/README.md)
+--      and as part of Step 6 (Knowledge Catalog & Metadata Grounding).
+--   2. Then run `python3 scripts/link_knowledge_catalog_glossary.py` (in Cloud
+--      Shell or locally) to create the 6 Business Glossary terms in
+--      `FinServ_Risk_Glossary` and link all 13 physical BigQuery columns via
+--      Dataplex Universal Catalog `EntryLink` resources (`entryLinkTypes/definition`).
 -- ============================================================================
 
 -- 1. Enrich Fact Table: finserv_risk_ops.fct_consumer_disputes
