@@ -87,7 +87,7 @@ Follow the three stages below to enrich your BigQuery tables, generate automated
 | **Monetary Relief Ratio** | `monetary relief rate`, `cash redress rate`, `upheld with financial relief`, `reimbursement rate` | The percentage of consumer disputes closed with direct monetary reimbursement or fee reversal (`res_disp_cd = 'Closed with monetary relief'`). Tracked at the case level via `mon_rel_ind = 1` and as a daily percentage in `agg_daily_risk_kpis.monetary_relief_rate_pct`. | `fct_consumer_disputes.mon_rel_ind`, `agg_daily_risk_kpis.monetary_relief_rate_pct` |
 | **Intake-to-Network Routing Lag** | `routing lag`, `forwarding lag`, `intake latency`, `queue routing delay` | The number of calendar days elapsed between initial dispute intake (`intake_dt`) and forwarding to the bank's operational resolution queue (`network_fwd_dt`). Tracked at the case level in `intake_fwd_lag_days` and averaged daily in `agg_daily_risk_kpis.avg_intake_fwd_lag_days`. | `fct_consumer_disputes.intake_fwd_lag_days`, `agg_daily_risk_kpis.avg_intake_fwd_lag_days` |
 | **Regulatory SLA Breach** | `SLA breach`, `untimely response`, `late compliance response` | Failure to provide a formal resolution within the mandated regulatory response window (`timely_response = FALSE`). Identified where `sla_breach_flg = 1` and tracked as a daily percentage in `agg_daily_risk_kpis.sla_breach_rate_pct`. | `fct_consumer_disputes.sla_breach_flg`, `agg_daily_risk_kpis.sla_breach_rate_pct` |
-| **Dispute Operational Cost** | `handling cost`, `ops cost`, `dispute servicing cost`, `cost per dispute` | Total estimated operational servicing and settlement processing cost in USD for handling consumer disputes, combining base intake cost ($45), Reg E compliance surcharge ($35), routing lag penalty ($8.50/day), Tier-2 review ($120), and monetary relief processing ($165). | `fct_consumer_disputes.est_ops_cost_usd`, `agg_daily_risk_kpis.total_ops_cost_usd` |
+| **Dispute Operational Cost** | `handling cost`, `ops cost`, `dispute servicing cost`, `cost per dispute` | Total estimated operational servicing and settlement processing cost in USD for handling consumer disputes, combining base intake cost ($45), Reg E compliance surcharge ($35), routing lag penalty ($8.50/day), Tier-2 review ($120), and monetary relief processing ($165). | `fct_consumer_disputes.est_ops_cost_usd`, `agg_daily_risk_kpis.total_ops_cost_usd`, `agg_daily_risk_kpis.avg_ops_cost_per_dispute_usd` |
 
 ---
 
@@ -234,11 +234,19 @@ In the **`FinServ_Payments_Risk_Agent`** builder, click **+ Add verified query**
 * **SQL Query:**
   ```sql
   SELECT
-    IFNULL(prod_line_cd, 'ALL PRODUCT LINES (Global)') AS product_line_scope,
+    CASE
+      WHEN prod_line_cd IS NULL
+        AND NOT EXISTS (SELECT 1 FROM UNNEST(segment) s WHERE s.dimension_col = 'prod_line_cd')
+        THEN 'ALL PRODUCT LINES (Global Aggregate)'
+      WHEN prod_line_cd IS NULL
+        THEN 'UNSPECIFIED PRODUCT'
+      ELSE prod_line_cd
+    END AS product_line_scope,
     target_col,
     corr_col AS correlated_operational_metric,
     ROUND(correlation, 4) AS pearson_correlation,
-    segment_size AS days_observed
+    segment_size AS days_observed,
+    ROUND(segment_proportion * 100, 2) AS pct_of_total_observations
   FROM ML.CORRELATION(
     TABLE finserv_risk_ops.agg_daily_risk_kpis,
     target_col => 'total_ops_cost_usd',
