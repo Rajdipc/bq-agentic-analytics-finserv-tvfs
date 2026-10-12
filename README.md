@@ -204,7 +204,7 @@ bq-agentic-analytics-finserv-tvfs/
 │   └── 99_teardown.sql                                    # Cleanup: DROP SCHEMA finserv_risk_ops CASCADE
 ├── docs/
 │   └── knowledge_catalog_and_bqca_assets.md               # Click-by-click Console guide + copy-paste Glossary, Instructions & Verified Queries
-└── images/                                                # High-DPI architecture & TVF reference diagrams
+└── images/                                                # High-DPI architecture diagrams + 8 live Console verification screenshots
 ```
 
 | File Path | Purpose |
@@ -218,7 +218,7 @@ bq-agentic-analytics-finserv-tvfs/
 | [`sql/06_audit_bqca_agent_jobs.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/06_audit_bqca_agent_jobs.sql) | Audit: Verifies agent TVF execution via `` `region-us`.INFORMATION_SCHEMA.JOBS `` |
 | [`sql/99_teardown.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/99_teardown.sql) | Cleanup: drops the `finserv_risk_ops` dataset and lists Console-only resources to delete |
 | [`docs/knowledge_catalog_and_bqca_assets.md`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/docs/knowledge_catalog_and_bqca_assets.md) | Click-by-click Console setup guide + copy-paste Knowledge Catalog Glossary terms, Agent Instructions, and Verified Queries |
-| [`images/`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/tree/main/images) | High-DPI architecture and 6-TVF reference diagrams (`diagram_1`–`diagram_4`, `table_1`–`table_2`) |
+| [`images/`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/tree/main/images) | High-DPI architecture and 6-TVF reference diagrams (`diagram_1`–`diagram_4`, `table_1`–`table_2`) plus all 8 live Console verification screenshots (`01_`–`08_`) |
 
 ---
 
@@ -316,11 +316,11 @@ Every step below uses the **Google Cloud Console** and works in any GCP project 
 Run this baseline check **before** executing [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) so you can see how an ungrounded agent behaves on raw column codes:
 
 1. In **BigQuery → Studio**, click **Agents** (or **Conversational Analytics**) in the left navigation bar.
-2. Click **+ New conversation** (direct table chat without creating a custom agent).
+2. Create an ungrounded test agent (e.g., `Demo-FinservRiskOps-Before-Grounding`) with **empty** Agent Instructions and **zero** Verified Queries.
 3. Under **Select data sources**, select **only** `<your-project>.finserv_risk_ops.fct_consumer_disputes` (which currently has empty column descriptions) and click **Add / Select**.
 4. Submit the Phase A test prompt from [**`docs/knowledge_catalog_and_bqca_assets.md` (Section 4, Phase A)**](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/docs/knowledge_catalog_and_bqca_assets.md#phase-a-the-before-grounding-test-direct-chat-on-raw-cryptic-table):
-   > *"What is the long-term trend and yearly seasonality of our daily Reg E qualifying disputes, and which intake channels and sub-products drove the biggest structural shift in Tier-2 escalations?"*
-5. Click **View generated SQL** under the agent's reply and **observe the failure**: because column descriptions are blank, the ungrounded session guesses what *"Reg E qualifying dispute"* (`reg_e_elig_flg`) and *"Tier-2 escalation"* (`cust_esc_tier2_flg`) mean—either asking for clarification, filtering on `iss_cat_cd LIKE '%Reg E%'` (which returns `0` rows!), or writing manual window functions instead of invoking the 6 TVFs.
+   > *"When did daily unauthorized electronic fund transfer claims under 12 CFR 1005 experience their biggest surge, and which product, sub-product, issue, submission channel, and state drove that surge compared to the baseline right before it?"*
+5. Expand the generated **SQL** blocks under the agent's reply (see [`images/05_bqca_before_grounding.png`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/images/05_bqca_before_grounding.png)): without **Verified Query 1** or `agg_daily_risk_kpis`, the ungrounded agent **skips `ML.DETECT_CHANGE_POINTS` entirely**, writes `claim_count - LAG(claim_count) OVER (ORDER BY intake_dt) AS dod_diff` (mistaking a normal Monday-vs.-Sunday rebound on `2022-02-28` vs. `2022-02-27` for the 5-year surge), and feeds those 2 days into `AI.KEY_DRIVERS` without `enable_pruning => TRUE`.
 
 ---
 

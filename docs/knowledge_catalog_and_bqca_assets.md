@@ -306,32 +306,32 @@ In the **`FinServ_Payments_Risk_Agent`** builder, click **+ Add verified query**
 Run this test **before** executing [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) or attaching the Knowledge Catalog Glossary:
 
 1. In **BigQuery → Studio**, click **Agents** (or **Conversational Analytics**) in the left navigation.
-2. Click **+ New conversation** (direct table chat, without selecting `FinServ_Payments_Risk_Agent`).
-3. Under **Select data sources**, attach **only** `<your-project>.finserv_risk_ops.fct_consumer_disputes` (with its blank column descriptions).
-4. Submit the following prompt:
+2. Create an ungrounded test agent (e.g., `Demo-FinservRiskOps-Before-Grounding`) with **empty** Agent Instructions and **zero** Verified Queries, attaching **only** `<your-project>.finserv_risk_ops.fct_consumer_disputes` (with its blank column descriptions).
+3. Submit the following prompt:
 
 > **Prompt:**
-> *"What is the long-term trend and yearly seasonality of our daily Reg E qualifying disputes, and which intake channels and sub-products drove the biggest structural shift in Tier-2 escalations?"*
+> *"When did daily unauthorized electronic fund transfer claims under 12 CFR 1005 experience their biggest surge, and which product, sub-product, issue, submission channel, and state drove that surge compared to the baseline right before it?"*
 
-5. Click **View generated SQL** under the agent's reply.
-* **Expected "Before Grounding" Failure / Context Gap:**
-  * Without Knowledge Catalog glossary terms or column descriptions, the ungrounded session must guess what *"Reg E qualifying dispute"* (`reg_e_elig_flg`), *"Tier-2 escalation"* (`cust_esc_tier2_flg`), and *"intake channel"* (`subm_chnl_cd`) mean—either asking for clarification, filtering on string literals like `iss_cat_cd LIKE '%Reg E%'` (which returns `0` rows!), or writing brittle manual window functions instead of invoking `ML.TREND`, `ML.SEASONALITY`, `ML.DETECT_CHANGE_POINTS`, and `AI.KEY_DRIVERS`.
+4. Expand the generated **SQL** blocks under the agent's reply (see [`images/05_bqca_before_grounding.png`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/images/05_bqca_before_grounding.png)):
+* **Observed "Before Grounding" Failure / Context Gap:**
+  * Even though BQCA's built-in `bigquery-ai-ml-ca-rules` system skill knows the SQL syntax for `AI.KEY_DRIVERS`, without **Verified Query 1** or `agg_daily_risk_kpis`, the ungrounded agent **skips `ML.DETECT_CHANGE_POINTS` entirely**.
+  * Instead, it writes a naive day-over-day `claim_count - LAG(claim_count) OVER (ORDER BY intake_dt) AS dod_diff` query—which mistakes a normal **Monday-vs.-Sunday rebound (`2022-02-28` at 212 claims vs. Sunday `2022-02-27` at 42 claims, `+170`)** for the biggest surge in five years, and then feeds `WHERE intake_dt IN ('2022-02-27', '2022-02-28')` into `AI.KEY_DRIVERS` without `enable_pruning => TRUE`.
 
 ---
 
 ### Phase B: The "After Grounding" 3-Turn Executive Investigation (In `FinServ_Payments_Risk_Agent`)
-Once [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) is applied and `FinServ_Payments_Risk_Agent` is saved with the Knowledge Catalog Business Glossary, Instructions, and Verified Queries:
+Once [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) is applied and `FinServ_Payments_Risk_Agent` (or `Demo-FinservRiskOps-After-Grounding`) is saved with the Knowledge Catalog Business Glossary, Instructions, and Verified Queries:
 
-1. In **BigQuery → Studio → Agents**, select **`FinServ_Payments_Risk_Agent`** and click **Start conversation** (or **+ New chat** so cached pre-enrichment metadata is cleared).
+1. In **BigQuery → Studio → Agents**, select your grounded agent and click **Start conversation** (or **+ New chat** so cached pre-enrichment metadata is cleared).
 2. Run the 3-turn executive investigation below, clicking **View generated SQL** after each response:
 
 * **Turn 1 (Act 1 — Trend, Seasonality & Correlation):**
   > *"Analyze the long-term trend and yearly and weekly seasonality of our daily Reg E disputes. Then tell me which operational metrics have the strongest correlation with total dispute operational cost across banking product lines."*
   * **Expected SQL & Output:** Calls `ML.TREND`, `ML.SEASONALITY`, and `ML.CORRELATION` (`dimension_cols => ['prod_line_cd']`) on `finserv_risk_ops.agg_daily_risk_kpis`, reporting `reg_e_dispute_vol` correlations of `r = 0.9405` in money transfer and `r = 0.9141` in checking/savings.
 
-* **Turn 2 (Act 2 — Structural Change Points & Key Drivers Attribution):**
-  > *"Detect when the biggest structural shift occurred in daily Reg E disputes, and identify the top 10 key drivers across product line, sub-product, issue category, submission channel, and state."*
-  * **Expected SQL & Output:** Executes the chained `ML.DETECT_CHANGE_POINTS` → `AI.KEY_DRIVERS` template (VQ-1), identifying the **`2021-05-04` → `2021-05-19`** surge (**`161.1` disputes/day**) and attributing the **`+423` (`+19.6%`)** jump to `Checking or savings account` (**`+424`, `+33.6%`**, `+425.4` unexpected excess) and `Checking account × Managing an account` (**`+61.0%`**).
+* **Turn 2 (Act 2 — Structural Change Points & Key Drivers Attribution; Direct Counterpart to Phase A):**
+  > *"When did daily unauthorized electronic fund transfer claims under 12 CFR 1005 experience their biggest surge, and which product, sub-product, issue, submission channel, and state drove that surge compared to the baseline right before it?"*
+  * **Expected SQL & Output (see [`images/07_bqca_after_grounding_tvf.png`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/images/07_bqca_after_grounding_tvf.png)):** Displays the green **Verified Query badge (`✓`)** and executes the chained `ML.DETECT_CHANGE_POINTS` → `AI.KEY_DRIVERS` template (VQ-1), identifying the **`2021-05-04` → `2021-05-19`** surge (**`161.1` disputes/day**) and attributing the **`+423` (`+19.6%`)** jump to `Checking or savings account` (**`+424`, `+33.6%`**, `+425.4` unexpected excess) and `Checking account × Managing an account` (**`+61.0%`**), complete with an auto-rendered driver bar chart.
 
 * **Turn 3 (Act 3 — Counterfactual Causal Effect):**
   > *"Quantify the causal effect on daily Reg E dispute volume after 2020-07-01 between 2020-01-01 and 2020-10-01, and also break down the causal impact on daily operational cost by banking product line."*
