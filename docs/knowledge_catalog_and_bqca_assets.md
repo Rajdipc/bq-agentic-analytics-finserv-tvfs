@@ -1,12 +1,84 @@
-# Knowledge Catalog & BQCA Copy-Paste Assets
+# Knowledge Catalog & BQCA Setup Guide and Copy-Paste Assets
 
-This file contains all copy-paste configuration blocks required when setting up **Knowledge Catalog** (Dataplex Business Glossary) and your **BigQuery Conversational Analytics (BQCA) Data Agent** in the Google Cloud Console, as described in the [main deployment runbook (`README.md`)](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/README.md) and the SQL scripts under [`sql/`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/tree/main/sql).
+This guide provides both the **click-by-click Google Cloud Console setup instructions** and all **copy-paste configuration payloads** required to configure **Knowledge Catalog** (schema enrichment, Data Profile & Data Insights scans, and Business Glossary) and your **BigQuery Conversational Analytics (BQCA) Data Agent** (`FinServ_Payments_Risk_Agent`), as referenced in the [main deployment runbook (`README.md`)](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/README.md) and the SQL scripts under [`sql/`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/tree/main/sql).
+
+---
+
+## 0. Prerequisites: APIs & IAM Roles
+
+Before configuring Knowledge Catalog or BigQuery Conversational Analytics in the Console, ensure the following APIs and IAM permissions are enabled in your Google Cloud project.
+
+### 0.1 Enable Required APIs
+In the Google Cloud Console, navigate to **APIs & Services → Library** and enable each of the following (or run this command in Cloud Shell):
+
+```bash
+gcloud services enable \
+  bigquery.googleapis.com \
+  dataplex.googleapis.com \
+  datacatalog.googleapis.com \
+  geminidataanalytics.googleapis.com \
+  cloudaicompanion.googleapis.com
+```
+
+### 0.2 Verify Required IAM Roles
+In **IAM & Admin → IAM**, confirm your user principal has:
+
+| Component | Required IAM Roles | What It Unlocks |
+| :--- | :--- | :--- |
+| **BigQuery Studio & TVFs** | `roles/bigquery.dataEditor` + `roles/bigquery.jobUser` | Creating `finserv_risk_ops`, running [`sql/01`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/01_setup_finserv_risk_mart.sql)–[`sql/06`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/06_audit_bqca_agent_jobs.sql), and updating column descriptions |
+| **Knowledge Catalog** | `roles/dataplex.catalogEditor` + `roles/dataplex.dataScanAdmin` | Creating the Business Glossary (`FinServ_Risk_Glossary`), linking terms to columns, and triggering Data Profile / Data Insights scans |
+| **BigQuery Conversational Analytics** | `roles/geminidataanalytics.dataAgentAdmin` + `roles/cloudaicompanion.user` | Creating, configuring, publishing, and chatting with `FinServ_Payments_Risk_Agent` |
 
 ---
 
 ## 1. Knowledge Catalog Business Glossary Terms (`FinServ_Risk_Glossary`)
 
-Create these terms in **Dataplex / Knowledge Catalog > Glossaries** (or inside the Data Agent Glossary editor) so the agent can resolve regulated banking vocabulary to your physical BigQuery columns:
+Follow the three stages below to enrich your BigQuery tables, generate automated Data Profile and Data Insights scans, and bind authoritative banking definitions in **Knowledge Catalog**.
+
+### 1.1 Stage 1 — Enrich Physical Table & Column Descriptions via SQL ([`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql))
+
+> **Tip:** If you want to capture the **"Before Grounding"** failure mode first, run **Phase A** in [Section 4](#phase-a-the-before-grounding-test-direct-chat-on-raw-cryptic-table) *before* executing [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql).
+
+1. In the Google Cloud Console, navigate to **BigQuery → Studio**.
+2. Click **+** (**Create SQL query**), paste the entire contents of [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql), and click **Run**.
+3. In the left **Explorer** pane, expand `finserv_risk_ops` and open **`fct_consumer_disputes` → Schema** (click the refresh icon if already open). Confirm that all **19 columns** now display regulatory and operational descriptions (`12 CFR 1005` scope on `reg_e_elig_flg`, proxy rules on `cust_esc_tier2_flg`, and the cost formula on `est_ops_cost_usd`).
+4. Open **`agg_daily_risk_kpis` → Schema** and confirm that all **10 columns** also carry descriptions (**29 enriched columns in total**).
+
+### 1.2 Stage 2 — Run Data Profile & Data Insights Scans in BigQuery Studio
+
+1. In **BigQuery → Studio**, open `finserv_risk_ops.fct_consumer_disputes`.
+2. **Generate Data Profile Scan:**
+   * Click the **Data profile** tab at the top of the table details pane.
+   * Click **Generate data profile** (or **Create data profile scan**).
+   * In the scan configuration panel:
+     * **Scope:** Select **Entire data** (the table is ~250 MB, so a full scan completes in under 60 seconds).
+     * **Schedule:** Select **On-demand**.
+   * Click **Create** (and **Run now** if prompted). When the scan finishes, the tab displays null rates, cardinality, quantiles, and top values for columns like `prod_line_cd`, `sub_prod_cd`, `iss_cat_cd`, and `subm_chnl_cd`.
+3. **Generate Automated Data Insights:**
+   * Click the **Insights** tab on `finserv_risk_ops.fct_consumer_disputes`.
+   * Click **Generate insights**.
+   * Wait ~1–2 minutes while Knowledge Catalog combines your newly populated column descriptions with the data profile statistics to generate grounded SQL patterns and distribution summaries.
+4. **Repeat on the Daily KPI Rollup Table:**
+   * Open `finserv_risk_ops.agg_daily_risk_kpis` in BigQuery Studio and run **Data profile → Generate data profile** and **Insights → Generate insights**.
+
+### 1.3 Stage 3 — Create `FinServ_Risk_Glossary` and Link Terms to Physical Columns
+
+1. **Create the Business Glossary:**
+   * In the Google Cloud Console navigation menu (**☰**), navigate to **Knowledge Catalog → Glossaries** (or under **BigQuery → Governance → Glossaries** / **Dataplex → Glossaries**, depending on your Console layout).
+   * Click **+ Create business glossary** (or **+ Create glossary**):
+     * **Display name:** `FinServ_Risk_Glossary`
+     * **Glossary ID:** `finserv-risk-glossary` (auto-filled)
+     * **Location:** `US (multi-region)` or `Global`
+     * **Description:** `Authoritative Consumer Banking, Payments Operations, and Regulation E (12 CFR 1005) dispute glossary for BigQuery Conversational Analytics.`
+   * Click **Create**.
+2. **Add the 6 Business Glossary Terms:**
+   * Open **`FinServ_Risk_Glossary`** and click **+ Create term** (or **+ Add term**) for each of the 6 terms in the table below.
+   * Paste the **Authoritative Business Definition** into the **Description / Overview** box, add the **Synonyms** (or labels), and click **Create**.
+3. **Link Each Term to Its Physical BigQuery Columns:**
+   * In **Knowledge Catalog → Search**, search for `fct_consumer_disputes` and click the entry `<your-project>.finserv_risk_ops.fct_consumer_disputes`.
+   * Open the **Schema** tab inside the Knowledge Catalog entry page.
+   * Select the checkbox next to each target column, click **+ Link glossary term** (or open the column row → **Glossary terms → Add**), and select the matching term from `FinServ_Risk_Glossary` as mapped in the **Linked BigQuery Columns** column below.
+   * Repeat in **Knowledge Catalog → Search** for `<your-project>.finserv_risk_ops.agg_daily_risk_kpis` → **Schema** to link the daily rollup columns.
 
 | Glossary Term | Synonyms (comma-separated) | Authoritative Business Definition (Copy-Paste) | Linked BigQuery Columns |
 | :--- | :--- | :--- | :--- |
@@ -20,6 +92,27 @@ Create these terms in **Dataplex / Knowledge Catalog > Glossaries** (or inside t
 ---
 
 ## 2. BQCA Data Agent Configuration (`FinServ_Payments_Risk_Agent`)
+
+Follow these steps in **BigQuery Studio** to create and configure the grounded Data Agent.
+
+### 2.0 Click-by-Click Agent Creation in BigQuery Studio
+1. In the Google Cloud Console, open **BigQuery → Studio**.
+2. In the left navigation bar, click **Agents** (or **Conversational Analytics**) and click **+ Create agent** (or **+ New data agent**).
+3. **Configure Agent Identity:**
+   * **Agent Name:** Copy-paste `FinServ_Payments_Risk_Agent` from **Section 2.1** below.
+   * **Location:** Select **`us` (multi-region US)** so it matches the `finserv_risk_ops` dataset location.
+   * **Description:** Copy-paste the description block from **Section 2.1** below.
+4. **Attach Knowledge Sources (Tables):**
+   * Under **Knowledge sources** (or **Data sources / Tables**), click **+ Add data source** (or **Select tables**).
+   * Expand your project and dataset **`finserv_risk_ops`**, check **both** tables below, and click **Add / Select**:
+     * `finserv_risk_ops.fct_consumer_disputes` *(granular case-level fact table used for `AI.KEY_DRIVERS`)*
+     * `finserv_risk_ops.agg_daily_risk_kpis` *(daily KPI rollup table used for `ML.TREND`, `ML.SEASONALITY`, `ML.CORRELATION`, `ML.DETECT_CHANGE_POINTS`, and `AI.CAUSAL_EFFECT`)*
+5. **Add System Instructions:**
+   * In the **Instructions** (or **Agent instructions / Context**) box, copy-paste the entire 3-part block from **Section 2.2** below.
+6. **Add Verified Queries:**
+   * Scroll to the **Verified queries** (or **Golden queries / Example queries**) section, click **+ Add verified query**, and add each of the 3 Verified Queries from [**Section 3**](#3-verified-queries-copy-paste-into-the-verified-queries-section).
+7. **Save and Publish:**
+   * Click **Save** / **Publish** at the top right of the Agent configuration pane.
 
 ### 2.1 Agent Name & Description
 * **Agent Name:** `FinServ_Payments_Risk_Agent`
@@ -55,6 +148,8 @@ You are the Consumer Banking & Payments Risk Operations Data Agent. Follow these
 ---
 
 ## 3. Verified Queries (Copy-Paste into the "Verified Queries" Section)
+
+In the **`FinServ_Payments_Risk_Agent`** builder, click **+ Add verified query** for each of the three queries below, paste the **Question** into the natural-language prompt field and the **SQL Query** into the query box, and click **Save**.
 
 ### Verified Query 1: Chained Structural Change Point & Key Drivers Attribution (from [`sql/03_act2_change_points_and_key_drivers_chain.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/03_act2_change_points_and_key_drivers_chain.sql))
 * **Question:**
@@ -200,24 +295,39 @@ You are the Consumer Banking & Payments Risk Operations Data Agent. Follow these
 ## 4. "Before vs. After Grounding" Conversational Prompt Script
 
 ### Phase A: The "Before Grounding" Test (Direct Chat on Raw Cryptic Table)
-Run this prompt in a **Direct Conversation** pointed only at the un-enriched `finserv_risk_ops.fct_consumer_disputes` table (before running [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) or attaching the Knowledge Catalog Glossary):
+Run this test **before** executing [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) or attaching the Knowledge Catalog Glossary:
+
+1. In **BigQuery → Studio**, click **Agents** (or **Conversational Analytics**) in the left navigation.
+2. Click **+ New conversation** (direct table chat, without selecting `FinServ_Payments_Risk_Agent`).
+3. Under **Select data sources**, attach **only** `<your-project>.finserv_risk_ops.fct_consumer_disputes` (with its blank column descriptions).
+4. Submit the following prompt:
 
 > **Prompt:**
 > *"What is the long-term trend and yearly seasonality of our daily Reg E qualifying disputes, and which intake channels and sub-products drove the biggest structural shift in Tier-2 escalations?"*
 
+5. Click **View generated SQL** under the agent's reply.
 * **Expected "Before Grounding" Failure / Context Gap:**
-  * Without Knowledge Catalog glossary terms or column descriptions, the ungrounded session must guess what *"Reg E qualifying dispute"* (`reg_e_elig_flg`), *"Tier-2 escalation"* (`cust_esc_tier2_flg`), and *"intake channel"* (`subm_chnl_cd`) mean—either asking for clarification, filtering on string literals like `issue LIKE '%Reg E%'` (which returns `0` rows!), or writing brittle manual window functions instead of invoking `ML.TREND`, `ML.SEASONALITY`, `ML.DETECT_CHANGE_POINTS`, and `AI.KEY_DRIVERS`.
+  * Without Knowledge Catalog glossary terms or column descriptions, the ungrounded session must guess what *"Reg E qualifying dispute"* (`reg_e_elig_flg`), *"Tier-2 escalation"* (`cust_esc_tier2_flg`), and *"intake channel"* (`subm_chnl_cd`) mean—either asking for clarification, filtering on string literals like `iss_cat_cd LIKE '%Reg E%'` (which returns `0` rows!), or writing brittle manual window functions instead of invoking `ML.TREND`, `ML.SEASONALITY`, `ML.DETECT_CHANGE_POINTS`, and `AI.KEY_DRIVERS`.
 
 ---
 
 ### Phase B: The "After Grounding" 3-Turn Executive Investigation (In `FinServ_Payments_Risk_Agent`)
-Once [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) is applied and `FinServ_Payments_Risk_Agent` is grounded with the Knowledge Catalog Business Glossary, Instructions, and Verified Queries, run this 3-turn executive conversation:
+Once [`sql/05_enrich_metadata_for_knowledge_catalog.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/05_enrich_metadata_for_knowledge_catalog.sql) is applied and `FinServ_Payments_Risk_Agent` is saved with the Knowledge Catalog Business Glossary, Instructions, and Verified Queries:
+
+1. In **BigQuery → Studio → Agents**, select **`FinServ_Payments_Risk_Agent`** and click **Start conversation** (or **+ New chat** so cached pre-enrichment metadata is cleared).
+2. Run the 3-turn executive investigation below, clicking **View generated SQL** after each response:
 
 * **Turn 1 (Act 1 — Trend, Seasonality & Correlation):**
   > *"Analyze the long-term trend and yearly and weekly seasonality of our daily Reg E disputes. Then tell me which operational metrics have the strongest correlation with total dispute operational cost across banking product lines."*
+  * **Expected SQL & Output:** Calls `ML.TREND`, `ML.SEASONALITY`, and `ML.CORRELATION` (`dimension_cols => ['prod_line_cd']`) on `finserv_risk_ops.agg_daily_risk_kpis`, reporting `reg_e_dispute_vol` correlations of `r = 0.9405` in money transfer and `r = 0.9141` in checking/savings.
 
 * **Turn 2 (Act 2 — Structural Change Points & Key Drivers Attribution):**
   > *"Detect when the biggest structural shift occurred in daily Reg E disputes, and identify the top 10 key drivers across product line, sub-product, issue category, submission channel, and state."*
+  * **Expected SQL & Output:** Executes the chained `ML.DETECT_CHANGE_POINTS` → `AI.KEY_DRIVERS` template (VQ-1), identifying the **`2021-05-04` → `2021-05-19`** surge (**`161.1` disputes/day**) and attributing the **`+423` (`+19.6%`)** jump to `Checking or savings account` (**`+424`, `+33.6%`**, `+425.4` unexpected excess) and `Checking account × Managing an account` (**`+61.0%`**).
 
 * **Turn 3 (Act 3 — Counterfactual Causal Effect):**
   > *"Quantify the causal effect on daily Reg E dispute volume after 2020-07-01 between 2020-01-01 and 2020-10-01, and also break down the causal impact on daily operational cost by banking product line."*
+  * **Expected SQL & Output:** Executes `AI.CAUSAL_EFFECT` on `finserv_risk_ops.agg_daily_risk_kpis`, reporting a portfolio cumulative effect of **`-1,573` (`-13.31%`)** with **`p = 0.594848`** (`40.52%` confidence — no statistically significant portfolio effect), and uses `id_cols => ['prod_line_cd']` to surface `Money transfer, virtual currency, or money service` (**`-$188,165.11`**, `-33.42%`, `90.93%` confidence, `p = 0.0907`).
+
+3. **Audit All Agent-Generated TVF Jobs (`sql/06_audit_bqca_agent_jobs.sql`):**
+   * Open a SQL editor tab in **BigQuery → Studio**, paste [`sql/06_audit_bqca_agent_jobs.sql`](https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs/blob/main/sql/06_audit_bqca_agent_jobs.sql), and click **Run** to inspect the `ca-bq-job = 'true'` entries in `` `region-us`.INFORMATION_SCHEMA.JOBS `` (`data_agent_id`, `conversation_id`, `invoked_augmented_analytics_tvfs`, `mb_billed`, `execution_ms`, and `generated_sql`).
