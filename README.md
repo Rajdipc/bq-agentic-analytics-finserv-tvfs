@@ -8,8 +8,16 @@
 [![Causal Inference & Time Series](https://img.shields.io/badge/Causal%20AI-Change%20Points%20%7C%20Key%20Drivers%20%7C%20Causal%20Effect-8E24AA)](https://cloud.google.com/bigquery/docs/reference/standard-sql/bigqueryml-syntax-causal-effect)
 [![Domain](https://img.shields.io/badge/FinServ-Reg%20E%20%26%20Payments%20Risk%20Ops-00897B)](https://www.consumerfinance.gov/data-research/consumer-complaints/)
 [![Zero Cluster](https://img.shields.io/badge/Serverless-100%25%20In--Warehouse%20SQL-0288D1)](#quickstart)
+[![Medium](https://img.shields.io/badge/Medium-Google%20Cloud%20Publication-black?logo=medium&logoColor=white)](https://medium.com/google-cloud/grounded-agentic-analytics-in-bigquery-augmented-analytics-tvfs-knowledge-catalog-and-f92df6bd17e4)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://console.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https://github.com/Rajdipc/bq-agentic-analytics-finserv-tvfs.git&cloudshell_open_in_editor=README.md)
+
+> 📰 **Companion Technical Deep Dive (Google Cloud Community):** **[Grounded Agentic Analytics in BigQuery: Augmented Analytics TVFs, Knowledge Catalog, and Conversational Analytics](https://medium.com/google-cloud/grounded-agentic-analytics-in-bigquery-augmented-analytics-tvfs-knowledge-catalog-and-f92df6bd17e4)**  
+> ⭐ *If you find this reference implementation helpful, please **star this repository**!*
 
 In-warehouse change-point detection, multidimensional driver attribution, and counterfactual impact analysis on **2.27M public CFPB banking complaints** (`2018–2022`), using all six **BigQuery Augmented Analytics Table-Valued Functions (TVFs)** (`ML.TREND`, `ML.SEASONALITY`, `ML.CORRELATION`, `ML.DETECT_CHANGE_POINTS`, `AI.KEY_DRIVERS`, and `AI.CAUSAL_EFFECT`), **Knowledge Catalog** semantic governance, and **BigQuery Conversational Analytics (BQCA)** Data Agents. Everything runs inside BigQuery from the **Google Cloud Console** (or Cloud Shell) with no external clusters and no hardcoded project IDs.
+
+![Grounded Agentic Analytics Architecture](images/diagram_1_architecture_overview.png)
 
 **Contents**
 | | |
